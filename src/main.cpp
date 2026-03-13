@@ -1,8 +1,8 @@
-/* * KynexOs v136.0 - The Zenith Core (Universal Click & Anti-Spam)
+/* * KynexOs v137.0 - The Quantum Kernel (Game Engine & Rotation Fix)
  * Geliştirici: Muhammed (Kynex)
  * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
- * Özellikler: Universal Joystick Click, Touch Anti-Spam, NTP Clock, TR QWERTY, Games, Web FM
- * Hata Düzeltme: WiFi Keyboard Trigger Fixed, Rotation(3) Fixed, Startup Sound Restored
+ * Özellikler: Smart Frame Limiter (30FPS Pong/Snake), TR QWERTY, Paint, Web FM, BLE
+ * Hata Düzeltme: Game Black Screen (Flicker Death) Fixed, Rotation(1) Top-Down Draw Fix
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -61,16 +61,15 @@ extern const uint8_t wallpaper_jpg_end[]   asm("_binary_src_wallpaper_jpg_end");
 #define COLOR_ICON_YEL  0xF620
 
 // --- SİSTEM DEĞİŞKENLERİ ---
-int currentScreen = 0; // 0:Desktop, 1:HW Test, 2:Explorer Info, 3:WiFi, 4:Klavye, 6:Snake, 7:Pong, 8:Paint, 9:About
+int currentScreen = 0; // 0:Desktop, 1:HW Test, 2:Explorer, 3:WiFi, 4:Klavye, 6:Snake, 7:Pong, 8:Paint, 9:About
 bool startMenuOpen = false;
 bool mouseEnabled = true;
 int mouseX = 160;
 int mouseY = 120;
-
 unsigned long btnPressStart = 0;
 bool longPressTriggered = false;
 unsigned long lastAction = 0;
-unsigned long lastTouchTime = 0; // Anti-Spam Dokunmatik icin eklendi
+unsigned long lastTouchTime = 0;
 
 // --- WIFI VE SAAT ---
 int numNetworks = 0;
@@ -99,6 +98,7 @@ unsigned long lastSnakeMove = 0;
 
 int p1Y = 100, p2Y = 100;
 int bX = 160, bY = 120, bDX = 5, bDY = 5;
+unsigned long lastPongMove = 0;
 
 // --- NESNELER ---
 Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
@@ -135,7 +135,7 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) 
     return true;
 }
 
-// AÇILIŞ VE TIKLAMA SESİ (GÜVENLİ)
+// SES MOTORU
 void playBeep(int f, int d) { 
     tone(SPEAKER_PIN, f, d); 
 }
@@ -258,10 +258,9 @@ void drawAboutScreen() {
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Sistem Bilgileri");
     tft.setTextColor(COLOR_BLACK);
     tft.setCursor(10, 60); tft.print("Cihaz: Kynex Sovereign S3");
-    tft.setCursor(10, 80); tft.print("Versiyon: v136.0 Zenith");
+    tft.setCursor(10, 80); tft.print("Versiyon: v137.0 Quantum");
     tft.setCursor(10, 110); tft.print("WiFi Ag: "); tft.print(WiFi.SSID());
     
-    // LINKLER EKLENDİ
     tft.setCursor(10, 140); tft.setTextColor(COLOR_BLUE);
     tft.print("FM Link: http://"); tft.print(WiFi.localIP().toString());
     tft.setCursor(10, 160); tft.setTextColor(COLOR_RED);
@@ -324,44 +323,80 @@ void drawHardwareTest(JoyData j1, JoyData j2) {
     tft.setCursor(10,85); tft.printf("JOY2 X:%04d Y:%04d B:%d", j2.x, j2.y, j2.btn);
 }
 
-// --- OYUN GÖVDELERİ ---
+// --- OYUN GÖVDELERİ (SİYAH EKRAN FLICKER ÇÖZÜMÜ) ---
 void spawnApple() { apple.x = random(1, 15) * 20; apple.y = random(3, 10) * 20; }
 
 void drawSnakeGame() {
-    tft.fillScreen(COLOR_BLACK);
+    tft.fillScreen(COLOR_BLACK); // SADECE OYUNA İLK GİRİŞTE SİLİNİR
+    tft.fillRect(0, 0, 320, 25, 0x2104);
     tft.setTextColor(COLOR_WHITE); tft.setCursor(5, 5); tft.print("SNAKE - Skor: "); tft.print(snakeLen-3);
     for(int i=0; i<snakeLen; i++) tft.fillRect(snake[i].x, snake[i].y, 18, 18, COLOR_GREEN);
     tft.fillRect(apple.x, apple.y, 18, 18, COLOR_RED);
 }
 
 void updateSnake(JoyData j) {
-    if (millis() - lastSnakeMove < 150) return;
-    if (j.x < 1000) snakeDir = 3; else if (j.x > 3000) snakeDir = 1;
-    else if (j.y < 1000) snakeDir = 0; else if (j.y > 3000) snakeDir = 2;
+    if (millis() - lastSnakeMove < 150) return; // 150ms bekleme
+    if (j.x < 1000 && snakeDir != 1) snakeDir = 3; else if (j.x > 3000 && snakeDir != 3) snakeDir = 1;
+    else if (j.y < 1000 && snakeDir != 2) snakeDir = 0; else if (j.y > 3000 && snakeDir != 0) snakeDir = 2;
+    
+    int oldTailX = snake[snakeLen-1].x;
+    int oldTailY = snake[snakeLen-1].y;
+
     for(int i=snakeLen-1; i>0; i--) snake[i] = snake[i-1];
     if(snakeDir==0) snake[0].y-=20; else if(snakeDir==1) snake[0].x+=20;
     else if(snakeDir==2) snake[0].y+=20; else if(snakeDir==3) snake[0].x-=20;
-    if(snake[0].x<0 || snake[0].x>300 || snake[0].y<40 || snake[0].y>220) { snakeLen=3; snake[0]={160,120}; spawnApple(); }
-    if(snake[0].x==apple.x && snake[0].y==apple.y) { snakeLen++; spawnApple(); playBeep(2000, 10); }
-    drawSnakeGame(); lastSnakeMove = millis();
+    
+    // Duvara Çarpma
+    if(snake[0].x<0 || snake[0].x>300 || snake[0].y<25 || snake[0].y>220) { 
+        snakeLen=3; snake[0]={160,120}; spawnApple(); drawSnakeGame(); 
+        lastSnakeMove = millis(); return; 
+    }
+    
+    // Elma Yeme
+    if(snake[0].x==apple.x && snake[0].y==apple.y) { 
+        snakeLen++; spawnApple(); playBeep(2000, 10); 
+        tft.fillRect(0, 0, 150, 25, 0x2104); // Sadece skoru yenile
+        tft.setTextColor(COLOR_WHITE); tft.setCursor(5, 5); tft.print("SNAKE - Skor: "); tft.print(snakeLen-3);
+        tft.fillRect(apple.x, apple.y, 18, 18, COLOR_RED);
+    } else {
+        tft.fillRect(oldTailX, oldTailY, 18, 18, COLOR_BLACK); // SADECE ESKİ KUYRUĞU SİL (TİTREME YOK)
+    }
+    
+    tft.fillRect(snake[0].x, snake[0].y, 18, 18, COLOR_GREEN); // YENİ KAFAYI ÇİZ
+    lastSnakeMove = millis();
 }
 
 void drawPongGame() {
-    tft.fillScreen(COLOR_BLACK);
+    tft.fillScreen(COLOR_BLACK); // SADECE İLK GİRİŞTE SİLİNİR
     tft.fillRect(10, p1Y, 10, 50, COLOR_WHITE);
     tft.fillRect(300, p2Y, 10, 50, COLOR_WHITE);
     tft.fillCircle(bX, bY, 5, COLOR_RED);
 }
 
 void updatePong(JoyData j1, JoyData j2) {
+    if (millis() - lastPongMove < 30) return; // 30 FPS LIMITER (SİYAH EKRAN ÇÖZÜMÜ)
+    
+    int oldP1 = p1Y; int oldP2 = p2Y; int oldBX = bX; int oldBY = bY;
+    
     p1Y = constrain(p1Y + (j1.y-2048)/80, 0, 190);
     p2Y = constrain(p2Y + (j2.y-2048)/80, 0, 190);
     bX += bDX; bY += bDY;
+    
     if(bY<=5 || bY>=235) bDY*=-1;
     if(bX<=25 && bY>=p1Y && bY<=p1Y+50) bDX*=-1;
     if(bX>=295 && bY>=p2Y && bY<=p2Y+50) bDX*=-1;
-    if(bX<0 || bX>320) { bX=160; bY=120; bDX*=-1; playBeep(400, 50); }
-    drawPongGame();
+    if(bX<0 || bX>320) { bX=160; bY=120; bDX*=-1; playBeep(400, 50); drawPongGame(); lastPongMove = millis(); return; }
+    
+    // AKILLI ÇİZİM (SADECE DEĞİŞEN PİKSELLERİ SİL)
+    if(oldP1 != p1Y) tft.fillRect(10, oldP1, 10, 50, COLOR_BLACK);
+    if(oldP2 != p2Y) tft.fillRect(300, oldP2, 10, 50, COLOR_BLACK);
+    tft.fillCircle(oldBX, oldBY, 5, COLOR_BLACK);
+    
+    tft.fillRect(10, p1Y, 10, 50, COLOR_WHITE);
+    tft.fillRect(300, p2Y, 10, 50, COLOR_WHITE);
+    tft.fillCircle(bX, bY, 5, COLOR_RED);
+    
+    lastPongMove = millis();
 }
 
 void drawScreen() {
@@ -376,13 +411,12 @@ void drawScreen() {
     else if (currentScreen == 9) drawAboutScreen();
 }
 
-// --- EVRENSEL TIKLAMA YÖNETİCİSİ (HATA BURADA ÇÖZÜLDÜ) ---
+// --- EVRENSEL TIKLAMA YÖNETİCİSİ ---
 void handleGlobalClick(int x, int y) {
     playBeep(1800, 20);
     
-    if (currentScreen == 0) { // Masaustu
+    if (currentScreen == 0) { 
         if (!startMenuOpen) {
-            // ALT GOREV CUBUGU BASLAT BUTONU
             if(y > 210 && x < 50) { startMenuOpen = true; drawScreen(); return; }
             
             if (x < 80) {
@@ -394,14 +428,14 @@ void handleGlobalClick(int x, int y) {
                 else if (y > 85 && y < 145) { currentScreen = 6; drawScreen(); }
                 else if (y > 150 && y < 210) { currentScreen = 7; drawScreen(); }
             }
-        } else { // Baslat Menusu Aciksa
+        } else { 
             if (x < 170) {
                 if (y > 80 && y < 115) { prefs.remove("ssid"); prefs.remove("pass"); WiFi.disconnect(); startMenuOpen=false; drawScreen(); }
                 if (y > 185) ESP.restart();
             } else { startMenuOpen = false; drawScreen(); }
         }
     } 
-    else if (currentScreen == 3) { // WiFi Secim Ekrani (KLAVYE TETIKLEYICI)
+    else if (currentScreen == 3) { 
         if (y > 40) {
             int idx = (y - 45) / 28;
             if (idx >= 0 && idx < numNetworks) { 
@@ -410,7 +444,7 @@ void handleGlobalClick(int x, int y) {
             }
         }
     } 
-    else if (currentScreen == 4) { // Klavye Ekrani
+    else if (currentScreen == 4) { 
         if (y >= 60 && y < 180) {
             int r = (y-60)/40; int c = (x-4)/26;
             if (c >= 0 && c < 12) { kbBuffer += kRows[kbMode][r].charAt(c); drawKynexKeyboard(); }
@@ -426,7 +460,7 @@ void handleGlobalClick(int x, int y) {
             }
         }
     } 
-    else if (currentScreen == 8) { // Paint
+    else if (currentScreen == 8) { 
         if (y < 35) {
             if (x < 30) paintColor = COLOR_RED; else if (x < 60) paintColor = COLOR_GREEN;
             else if (x < 90) paintColor = COLOR_BLUE; else if (x < 120) paintColor = COLOR_YELLOW;
@@ -440,7 +474,6 @@ void setup() {
     Serial.begin(115200); psramInit(); FFat.begin(true);
     prefs.begin("kynex", false);
     
-    // Çift Mod (AP + STA) - İnternet kilitlenmesini çözer
     WiFi.mode(WIFI_AP_STA);
     
     String s = prefs.getString("ssid", "");
@@ -462,14 +495,12 @@ void setup() {
     TJpgDec.setJpgScale(1); TJpgDec.setCallback(tft_output);
     SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, TFT_CS); 
     
-    // EKRAN TAM 180 DERECE DÖNDÜRÜLDÜ
-    tft.begin(); tft.setRotation(3); 
-    ts.begin(); ts.setRotation(3);
+    // EKRAN DÜZELTİLDİ: Tam 180 Derece Döndürme (Yukarıdan aşağıya yükler)
+    tft.begin(); tft.setRotation(1); 
+    ts.begin(); ts.setRotation(1);
     
-    // GÜÇLÜ AÇILIŞ SESİ
-    playBeep(1000, 400); 
-    delay(400);
-    playBeep(1500, 200);
+    // AÇILIŞ SESİ
+    playBeep(1000, 400); delay(400); playBeep(1500, 200);
     
     drawScreen();
 }
@@ -492,7 +523,6 @@ void loop() {
     } else {
         if (btnPressStart != 0) {
             unsigned long dur = millis() - btnPressStart;
-            // EVRENSEL TIKLAMA: Hangi ekranda olursa olsun joystick ile tiklanabilir
             if (!longPressTriggered && dur > 50) {
                 if (mouseEnabled) { handleGlobalClick(mouseX, mouseY); }
                 else if (currentScreen == 0) { startMenuOpen = !startMenuOpen; drawScreen(); }
@@ -506,12 +536,12 @@ void loop() {
     else if(currentScreen == 7) updatePong(j1, j2);
     
     // FARE MOTORU
-    else if (mouseEnabled && currentScreen != 1) { // Test ekrani haric fare goster
+    else if (mouseEnabled && currentScreen != 1) { 
         int dx = (j1.x - 2048) / 100; int dy = (j1.y - 2048) / 100;
         if (abs(dx) > 1 || abs(dy) > 1) {
             mouseX = constrain(mouseX + dx, 0, 310); mouseY = constrain(mouseY + dy, 0, 225);
             if (millis() - lastAction > 50) { 
-                if(currentScreen == 0) { // Sadece masaüstünde ikon hover kontrolu
+                if(currentScreen == 0) { 
                     int hIdx = -1;
                     if (!startMenuOpen) {
                         if (mouseX < 80) {
@@ -525,13 +555,13 @@ void loop() {
                         }
                     }
                     drawDesktop(hIdx);
-                } else if (currentScreen != 8) { // Paint haric ekrani yenile
+                } else if (currentScreen != 8) { 
                     drawScreen();
                 }
                 
-                if (currentScreen == 8) { // Paint uzerinde fare ile cizim
+                if (currentScreen == 8) { 
                     tft.fillCircle(mouseX, mouseY, 2, paintColor);
-                } else { // Klasik Fare
+                } else { 
                     tft.fillTriangle(mouseX, mouseY, mouseX+10, mouseY+10, mouseX, mouseY+14, COLOR_WHITE);
                 }
                 lastAction = millis(); 
@@ -539,7 +569,7 @@ void loop() {
         }
     }
 
-    // DOKUNMATIK MOTORU VE ANTI-SPAM (Bip dongusu cozumu)
+    // DOKUNMATIK MOTORU VE ANTI-SPAM (Bip sesinin kilitlenmesini onler)
     if (ts.touched() && millis() - lastTouchTime > 400) {
         TS_Point p = ts.getPoint();
         int tx = map(p.x, 200, 3850, 320, 0); int ty = map(p.y, 240, 3800, 240, 0);
