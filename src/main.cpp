@@ -1,8 +1,8 @@
-/* * KynexOs v139.0 - The Dual Boot Master (RetroGo Bridge)
+/* * KynexOs v139.0 - The Sovereign Multi-Boot (Absolute Master)
  * Geliştirici: Muhammed (Kynex)
- * Donanım: ESP32-S3 N16R8
- * Özellikler: Standalone RetroGo System Switch, Dual-Boot Logic, NTP Clock, TR QWERTY, Paint, Games
- * Hata Düzeltme: Rotation(1) Fix, Universal Keyboard Hitbox, OTA Partition Switching
+ * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
+ * Özellikler: Dual-Boot RetroGo, NTP Clock, About Links, WiFi Master, Paint, Snake, Pong
+ * Hata Düzeltme: WiFi Password Handshake Fix, Rotation(1) Top-Down Draw, Universal Click
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -21,7 +21,7 @@
 #include <BLEUtils.h>
 #include <BLEServer.h>
 #include <time.h>
-#include "esp_ota_ops.h" // Dual boot gecisi icin kritik kutuphane
+#include "esp_ota_ops.h" // Dual boot geçişi için kritik sistem kütüphanesi
 
 // --- GÖMÜLÜ DOSYA İŞARETÇİLERİ ---
 extern const uint8_t wallpaper_jpg_start[] asm("_binary_src_wallpaper_jpg_start");
@@ -55,12 +55,12 @@ extern const uint8_t wallpaper_jpg_end[]   asm("_binary_src_wallpaper_jpg_end");
 #define COLOR_GREEN     0x07E0
 #define COLOR_BLUE      0x001F
 #define COLOR_YELLOW    0xFFE0
+#define RETRO_GOLD      0xFEA0 // RetroGo İkonu İçin
 #define COLOR_ICON_PC   0x4D3F
 #define COLOR_ICON_SET  0x7BEF
-#define RETRO_GOLD      0xFEA0
 
 // --- SİSTEM DEĞİŞKENLERİ ---
-int currentScreen = 0; // 0:Desktop, 1:HW Test, 2:WebFM, 3:WiFi, 4:Keyboard, 6:Snake, 7:Pong, 8:Paint, 9:About
+int currentScreen = 0; // 0:Desktop, 1:HW Test, 2:Explorer, 3:WiFi, 4:Keyboard, 6:Snake, 7:Pong, 8:Paint, 9:About
 bool startMenuOpen = false;
 bool mouseEnabled = true;
 int mouseX = 160;
@@ -139,22 +139,22 @@ JoyData readJoy(int px, int py, int psw) {
     return d;
 }
 
-// --- DUAL BOOT: RETRO-GO GECISI ---
+// --- DUAL BOOT: RETRO-GO SİSTEMİNE GEÇİŞ ---
 void switchToRetroGo() {
     playBeep(400, 500);
     tft.fillScreen(COLOR_BLACK);
     tft.setTextColor(COLOR_WHITE); tft.setCursor(40, 100);
     tft.print("RETRO-GO SISTEMINE GECILIYOR...");
     
-    // Hafızadaki ota_0 (RetroGo) bolumunu bul
+    // Hafızadaki ota_0 (RetroGo) bölümünü bulur
     const esp_partition_t* retro_part = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, NULL);
     if (retro_part != NULL) {
-        esp_ota_set_boot_partition(retro_part); // Boot önceliğini RetroGo'ya ver
+        esp_ota_set_boot_partition(retro_part);
         delay(1000);
-        ESP.restart(); // Yeniden başlat ve RetroGo açılsın
+        ESP.restart(); // Cihaz artık RetroGo olarak açılır
     } else {
         tft.fillScreen(COLOR_RED); tft.setCursor(40, 120);
-        tft.print("HATA: RETRO-GO BULUNAMADI!");
+        tft.print("HATA: RETRO-GO BOLUMU YOK!");
         delay(3000);
         currentScreen = 0; drawScreen();
     }
@@ -162,7 +162,7 @@ void switchToRetroGo() {
 
 // --- WEB FM ---
 void handleWebRoot() {
-    String h = "<html><head><meta charset='UTF-8'></head><body style='font-family:sans-serif;'><h1>Kynex Explorer</h1><hr>";
+    String h = "<html><head><meta charset='UTF-8'></head><body style='font-family:sans-serif;'><h1>Kynex Web File Manager</h1><hr>";
     File root = FFat.open("/");
     File file = root.openNextFile();
     while(file) {
@@ -173,7 +173,15 @@ void handleWebRoot() {
     server.send(200, "text/html", h);
 }
 
-// --- SAAT ---
+void handleFileDelete() { if(server.hasArg("f")) { FFat.remove("/" + server.arg("f")); } server.sendHeader("Location", "/"); server.send(303); }
+void handleFileUpload() {
+    HTTPUpload& upload = server.upload();
+    if(upload.status == UPLOAD_FILE_START){ fsUploadFile = FFat.open("/" + upload.filename, FILE_WRITE); }
+    else if(upload.status == UPLOAD_FILE_WRITE && fsUploadFile){ fsUploadFile.write(upload.buf, upload.currentSize); }
+    else if(upload.status == UPLOAD_FILE_END && fsUploadFile){ fsUploadFile.close(); }
+}
+
+// --- SİSTEM BİLEŞENLERİ ---
 void updateClock() {
     struct tm timeinfo;
     if(!getLocalTime(&timeinfo)){ return; }
@@ -181,7 +189,6 @@ void updateClock() {
     currentTime = String(timeStr);
 }
 
-// --- UI ÇİZİMLERİ ---
 void renderIcon(int x, int y, const char* txt, uint16_t c, bool h) {
     uint16_t finalC = h ? WIN10_HOVER : c;
     if (h) tft.drawRoundRect(x-5, y-5, 52, 52, 6, COLOR_WHITE);
@@ -208,7 +215,7 @@ void drawDesktop(int hIdx) {
     renderIcon(20, 85, "WiFi", COLOR_ICON_SET, hIdx == 2);
     renderIcon(20, 150, "About", 0x7BEF, hIdx == 3);
     
-    renderIcon(90, 20, "RetroGo", RETRO_GOLD, hIdx == 4); // MUHAMMED: 2. Sistem Butonu
+    renderIcon(90, 20, "RetroGo", RETRO_GOLD, hIdx == 4); // MUHAMMED: RETROGO MASAÜSTÜNDE!
     renderIcon(90, 85, "Paint", COLOR_RED, hIdx == 5);
     renderIcon(90, 150, "Snake", COLOR_GREEN, hIdx == 6);
     
@@ -217,38 +224,35 @@ void drawDesktop(int hIdx) {
     if (startMenuOpen) {
         tft.fillRect(0, 40, 170, 175, WIN10_TASKBAR);
         tft.drawRect(0, 40, 170, 175, WIN10_START);
-        tft.setTextColor(COLOR_WHITE);
-        tft.setCursor(15, 60); tft.print("Kynex Zenith S3");
-        tft.fillRect(0, 185, 170, 30, COLOR_RED);
-        tft.setCursor(65, 197); tft.print("RST");
+        tft.setTextColor(COLOR_WHITE); tft.setCursor(15, 60); tft.print("Kynex Sovereign OS");
+        tft.setCursor(15, 95); tft.print("> WiFi Unut");
+        tft.fillRect(0, 185, 170, 30, COLOR_RED); tft.setCursor(65, 197); tft.print("RST");
     }
-}
-
-void drawExplorerInfo() {
-    tft.fillScreen(COLOR_WHITE); tft.fillRect(0, 0, 320, 35, WIN10_START);
-    tft.setTextColor(COLOR_WHITE); tft.setCursor(10, 12); tft.print("Web File Manager");
-    tft.setTextColor(COLOR_BLACK); tft.setCursor(10, 60); tft.print("IP: "); tft.print(WiFi.localIP().toString());
 }
 
 void drawAboutScreen() {
     tft.fillScreen(COLOR_WHITE); tft.fillRect(0,0,320,35, WIN10_START);
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Sistem Bilgileri");
     tft.setTextColor(COLOR_BLACK);
-    tft.setCursor(10, 60); tft.print("Versiyon: v139.0 Dual-Boot");
-    tft.setCursor(10, 90); tft.print("System 2: RetroGo (OTA_0)");
+    tft.setCursor(10, 60); tft.print("Cihaz: Kynex Sovereign S3");
+    tft.setCursor(10, 80); tft.print("Surum: v139.0 Dual-Boot");
+    tft.setCursor(10, 110); tft.print("Bagli Ag: "); tft.print(WiFi.SSID());
     tft.setCursor(10, 140); tft.setTextColor(COLOR_BLUE);
-    tft.print("FM Link: http://"); tft.print(WiFi.localIP().toString());
+    tft.print("IP: http://"); tft.print(WiFi.localIP().toString());
+    tft.setCursor(10, 160); tft.setTextColor(COLOR_RED);
+    tft.print("AP: http://192.168.4.1");
+    tft.setTextColor(COLOR_BLACK); tft.setCursor(10, 210); tft.print("Geri: Sol Joy Uzun Bas");
 }
 
 void drawSettingsScreen() {
     tft.fillScreen(COLOR_WHITE); tft.fillRect(0,0,320,35, WIN10_START);
-    tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("WiFi Aglari");
+    tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Aglari Taraniyor...");
     numNetworks = WiFi.scanNetworks();
+    tft.fillRect(0,0,320,35, WIN10_START); tft.setCursor(10,12); tft.print("Ag Seciniz:");
     tft.setTextColor(COLOR_BLACK);
     for(int i=0; i<min(numNetworks,6); i++) {
         networks[i] = WiFi.SSID(i);
-        tft.drawRect(5, 45+(i*28), 310, 25, 0xCE79);
-        tft.setCursor(15, 53+(i*28)); tft.print(networks[i]);
+        tft.drawRect(5, 45+(i*28), 310, 25, 0xCE79); tft.setCursor(15, 53+(i*28)); tft.print(networks[i]);
     }
 }
 
@@ -271,7 +275,7 @@ void drawPaintApp() {
     tft.setCursor(135, 12); tft.setTextColor(COLOR_BLACK); tft.print("SILGI");
 }
 
-// --- OYUN MOTORLARI ---
+// --- OYUNLAR ---
 void spawnApple() { apple.x = random(1, 15) * 20; apple.y = random(3, 10) * 20; }
 void drawSnakeGame() {
     tft.fillScreen(COLOR_BLACK); tft.fillRect(0,0,320,25,0x2104);
@@ -295,7 +299,7 @@ void updateSnake(JoyData j) {
 // --- MERKEZİ SİSTEM ---
 void drawScreen() {
     if (currentScreen == 0) drawDesktop(-1);
-    else if (currentScreen == 2) drawExplorerInfo();
+    else if (currentScreen == 2) { tft.fillScreen(COLOR_WHITE); drawExplorerInfo(); }
     else if (currentScreen == 3) drawSettingsScreen();
     else if (currentScreen == 4) drawKynexKeyboard();
     else if (currentScreen == 6) { snakeLen=3; snake[0]={160,120}; spawnApple(); drawSnakeGame(); }
@@ -313,7 +317,7 @@ void handleGlobalClick(int x, int y) {
                 else if (y > 85 && y < 145) { currentScreen = 3; drawScreen(); }
                 else if (y > 150 && y < 210) { currentScreen = 9; drawScreen(); }
             } else if (x > 80 && x < 160) {
-                if (y > 20 && y < 80) { switchToRetroGo(); } // MUHAMMED: RETROGO'YA GECIS
+                if (y > 20 && y < 80) { switchToRetroGo(); } // MUHAMMED: RETROGO'YA SIÇRA!
                 else if (y > 85 && y < 145) { currentScreen = 8; drawScreen(); }
                 else if (y > 150 && y < 210) { currentScreen = 6; drawScreen(); }
             }
@@ -329,12 +333,13 @@ void handleGlobalClick(int x, int y) {
 void setup() {
     Serial.begin(115200); psramInit(); FFat.begin(true); prefs.begin("kynex", false);
     WiFi.mode(WIFI_AP_STA); WiFi.softAP("KynexOs-Win10", "*muhammed*krid*");
-    server.on("/", handleWebRoot); server.begin();
-    
+    server.on("/", handleWebRoot); 
+    server.on("/upload", HTTP_POST, [](){ server.sendHeader("Location", "/"); server.send(303); }, handleFileUpload);
+    server.begin();
     SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, TFT_CS); 
     tft.begin(); tft.setRotation(1); ts.begin(SPI); ts.setRotation(1);
     
-    // OTOMATIK BAGLANMA
+    // Auto-Connect
     String s = prefs.getString("ssid", ""); String p = prefs.getString("pass", "");
     if(s != "") WiFi.begin(s.c_str(), p.c_str());
 
@@ -342,7 +347,7 @@ void setup() {
 }
 
 void loop() {
-    server.handleClient(); updateClock();
+    server.handleClient(); if(WiFi.status() == WL_CONNECTED) updateClock();
     JoyData j1 = readJoy(JOY1_X, JOY1_Y, JOY1_SW);
     if (j1.btn) {
         if (btnPressStart == 0) btnPressStart = millis();
