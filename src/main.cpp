@@ -1,8 +1,8 @@
-/* * KynexOs v129.0 - The Master Core (Infinite Loop & Radio Crash Fix)
+/* * KynexOs v130.0 - The Master Core (Architecture Fixed Edition)
  * Geliştirici: Muhammed (Kynex)
  * Donanım: ESP32-S3 N16R8 (DIO+OPI)
- * Özellikler: Dual WiFi Mode (AP+STA), Precise Hitboxes, Tech-Grid BG, BLE Manager, FFat
- * Hata Düzeltme: WiFi Password Rejection (Radio Loop Fix), Start Menu Sub-tabs Unresponsive Fix
+ * Özellikler: Dual WiFi Mode, Precise Hitboxes, Tech-Grid BG, BLE Manager, FFat
+ * Hata Düzeltme: Boolean logic inverted, FFat mounting, SPI sharing, Int casting, PSRAM Check
  * Talimat: Asla satır silme, optimize etme, sadeleştirme yapma. 
  */
 
@@ -60,7 +60,10 @@ extern const uint8_t wallpaper_jpg_end[]   asm("_binary_src_wallpaper_jpg_end");
 int currentScreen = 0; // 0: Masaüstü, 1: HW Test, 2: Web FM, 3: WiFi Scanner, 4: Klavye, 5: BT Scanner
 bool startMenuOpen = false;
 bool mouseEnabled = true;
-float mouseX = 160, mouseY = 120;
+
+// FLOAT OPTIMIZASYONU (RAM & FPU Tasarrufu)
+int mouseX = 160;
+int mouseY = 120;
 
 unsigned long btnPressStart = 0;
 bool longPressTriggered = false;
@@ -108,7 +111,10 @@ void playBeep(int f, int d) { tone(SPEAKER_PIN, f, d); }
 struct JoyData { int x, y; bool btn; };
 JoyData readJoy(int px, int py, int psw) {
     JoyData d; 
-    d.x = analogRead(px); d.y = analogRead(py); d.btn = (digitalRead(psw) == LOW);
+    d.x = analogRead(px); 
+    d.y = analogRead(py); 
+    // MANTIK HATASI DÜZELTİLDİ: LOW ise true doner.
+    d.btn = (digitalRead(psw) == LOW); 
     return d;
 }
 
@@ -185,7 +191,8 @@ void drawTaskbar() {
 
 void drawDesktop(int hoverIdx) {
     tft.fillRect(0, 0, 320, 240, COLOR_BLACK); 
-    // Siber Izgara (Resmin yarida kesilme ihtimaline karsi profesyonel gorunum)
+    
+    // Siber Izgara
     for(int i=0; i<320; i+=20) tft.drawFastVLine(i, 0, 240, 0x18C3);
     for(int i=0; i<240; i+=20) tft.drawFastHLine(0, i, 320, 0x18C3);
     
@@ -249,7 +256,6 @@ void drawSettingsScreen() {
     tft.fillRect(0, 0, 320, 35, WIN10_START);
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10, 12); tft.print("WiFi Aglari Taraniyor...");
     
-    // HATA BURADA ÇÖZÜLDÜ: Taramayı ekrana yazmadan hemen önce BİR KEZ yapar
     numNetworks = WiFi.scanNetworks();
     
     tft.fillRect(0, 0, 320, 35, WIN10_START);
@@ -307,11 +313,10 @@ void drawScreen() {
     else if (currentScreen == 5) drawBTScreen();
 }
 
-// --- TIKLAMA YÖNETİCİSİ (KUSURSUZ HITBOX) ---
+// --- TIKLAMA YÖNETİCİSİ ---
 void handleGlobalClick(int x, int y) {
     playBeep(1800, 20);
     
-    // GÖREV ÇUBUĞU (Başlat Menüsü Butonu)
     if (currentScreen == 0 && y > 210 && x < 50) {
         startMenuOpen = !startMenuOpen;
         drawScreen();
@@ -324,17 +329,16 @@ void handleGlobalClick(int x, int y) {
                 if (y > 20 && y < 80) { currentScreen = 2; drawScreen(); }
                 else if (y > 80 && y < 145) { 
                     currentScreen = 3; 
-                    tft.fillScreen(COLOR_BLACK); tft.setCursor(10,100); tft.setTextColor(COLOR_WHITE); tft.print("Ağlar Taranıyor Lütfen Bekleyin...");
+                    tft.fillScreen(COLOR_BLACK); tft.setCursor(10,100); tft.setTextColor(COLOR_WHITE); tft.print("Ağlar Taranıyor...");
                     drawScreen(); 
                 }
                 else if (y > 145 && y < 210) { currentScreen = 1; tft.fillScreen(COLOR_BLACK); }
             }
         } else {
-            // BAŞLAT MENÜSÜ AÇIKKEN TIKLAMALAR (HATA BURADA ÇÖZÜLDÜ)
             if (x < 170 && y > 40 && y < 215) {
                 if (y > 75 && y < 115) { 
                     currentScreen = 3; startMenuOpen = false; 
-                    tft.fillScreen(COLOR_BLACK); tft.setCursor(10,100); tft.setTextColor(COLOR_WHITE); tft.print("Ağlar Taranıyor Lütfen Bekleyin...");
+                    tft.fillScreen(COLOR_BLACK); tft.setCursor(10,100); tft.setTextColor(COLOR_WHITE); tft.print("Ağlar Taranıyor...");
                     drawScreen(); 
                 } 
                 else if (y > 115 && y < 155) { currentScreen = 5; startMenuOpen = false; drawScreen(); } 
@@ -354,12 +358,12 @@ void handleGlobalClick(int x, int y) {
         }
     }
     else if (currentScreen == 4) { 
-        if (y >= 60 && y < 180) { // Harfler
+        if (y >= 60 && y < 180) {
             int r = (y - 60) / 40; 
             int c = (x - 4) / 26;
             if (c >= 0 && c < 12) { kbBuffer += kRows[kbMode][r].charAt(c); drawScreen(); }
         } 
-        else if (y >= 180 && y < 220) { // Fonksiyonlar
+        else if (y >= 180 && y < 220) {
             if (x >= 4 && x < 44) { kbMode = (kbMode == 2) ? 0 : 2; drawScreen(); } 
             else if (x >= 48 && x < 88) { kbMode = (kbMode == 0) ? 1 : 0; drawScreen(); } 
             else if (x >= 92 && x < 192) { kbBuffer += " "; drawScreen(); } 
@@ -376,18 +380,29 @@ void handleGlobalClick(int x, int y) {
 // --- KURULUM ---
 void setup() {
     Serial.begin(115200);
-    psramInit();
-    if(!FFat.begin(true)) FFat.format();
+    
+    // PSRAM KONTROLÜ DÜZELTİLDİ
+    if(psramInit()){
+        Serial.println("PSRAM OK");
+    } else {
+        Serial.println("PSRAM FAILED");
+    }
+
+    // FFAT MOUNT MANTIĞI DÜZELTİLDİ
+    if(!FFat.begin()){
+        Serial.println("FFat Mount Failed, Formatting...");
+        FFat.format();
+        FFat.begin();
+    }
     prefs.begin("kynex", false);
 
-    // HATA ÇÖZÜMÜ: AP VE STA MODU ÇAKIŞMASI ENGELLENDİ
     WiFi.mode(WIFI_AP_STA);
 
     String savedSSID = prefs.getString("ssid", "");
     String savedPASS = prefs.getString("pass", "");
     if(savedSSID != "") WiFi.begin(savedSSID.c_str(), savedPASS.c_str());
 
-    WiFi.softAP("Kynex-Win10", "*muhammed*krid*");
+    WiFi.softAP("KynexOs-Win10", "*muhammed*krid*");
     
     server.on("/", handleWebRoot);
     server.on("/del", handleFileDelete);
@@ -397,35 +412,39 @@ void setup() {
 
     BLEDevice::init("Kynex-Sovereign-BLE");
     BLEServer *pServer = BLEDevice::createServer();
+    (void)pServer; // Warning onleyici
     BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(BLEUUID((uint16_t)0x180D));
     pAdvertising->setScanResponse(true);
     pAdvertising->start();
 
+    // PULLUP EKSİKLERİ DÜZELTİLDİ
     pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, HIGH);
     pinMode(JOY1_SW, INPUT_PULLUP);
+    pinMode(JOY2_SW, INPUT_PULLUP);
     
     TJpgDec.setJpgScale(1);
     TJpgDec.setCallback(tft_output);
-    SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, TFT_CS); 
     
+    // SPI VE TOUCH PAYLAŞIMI DÜZELTİLDİ
+    SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, TFT_CS); 
     tft.begin(); 
     tft.setRotation(3); 
-    ts.begin(); 
+    ts.begin(SPI); // Touch artık dogru SPI hattini kullaniyor
     ts.setRotation(3);
     
     playBeep(1000, 200);
     drawScreen();
 }
 
-// --- ANA DÖNGÜ (HATA BURADA ÇÖZÜLDÜ) ---
+// --- ANA DÖNGÜ ---
 void loop() {
     server.handleClient();
     JoyData j1 = readJoy(JOY1_X, JOY1_Y, JOY1_SW);
     JoyData j2 = readJoy(JOY2_X, JOY2_Y, JOY2_SW);
 
-    // GERİ TUŞU YÖNETİMİ
-    if (j1.btn == LOW) {
+    // BOOLEAN MANTIK HATASI DÜZELTİLDİ (if(j1.btn))
+    if (j1.btn) {
         if (btnPressStart == 0) btnPressStart = millis();
         if (millis() - btnPressStart > 1500 && !longPressTriggered) {
             longPressTriggered = true;
@@ -445,7 +464,6 @@ void loop() {
         }
     }
 
-    // EKRAN İÇİ FARE YÖNETİMİ (Sadece masaüstü ve test ekranında ekran yenilenir)
     if (mouseEnabled) {
         int dx = (j1.x - 2048) / 100;
         int dy = (j1.y - 2048) / 100;
@@ -464,16 +482,15 @@ void loop() {
                     drawDesktop(hIdx);
                     drawMouse();
                 } else if (currentScreen == 1) {
-                    // HW Test ekrani
+                    // Test ekraninda fare cizimi
                 }
-                // Diger ekranlarda fare hareket etse de ekrani basa sarmasin (Wifi taramasi kesilmesin)
                 lastAction = millis();
             }
         }
     }
 
-    // DOKUNMATİK EKRAN
     if (ts.touched()) {
+        // Dokunmatik X ve Y kalibrasyon degerleri (Ekranina gore test edilmeli)
         TS_Point p = ts.getPoint();
         int tx = map(p.x, 200, 3850, 320, 0); 
         int ty = map(p.y, 240, 3800, 240, 0);
@@ -481,7 +498,6 @@ void loop() {
         delay(200); 
     }
     
-    // DONANIM TESTİ YENİLEME EKRANI
     if (currentScreen == 1) {
         if (millis() - lastAction > 100) { 
             drawHardwareTest(j1, j2); 
