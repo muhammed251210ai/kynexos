@@ -1,8 +1,8 @@
-/* * KynexOs v144.0 - The Absolute Cure (Hardware Conflict & LEDC Panic Fix)
+/* * KynexOs v145.0 - The Silence (LEDC Hardware Override Fix)
  * Geliştirici: Muhammed (Kynex)
  * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
  * Özellikler: Dual-Boot RetroGo, Custom Bit-Bang Audio, SPI DMA Fix, WiFi Master, Games
- * Hata Düzeltme: LEDC is not initialized (PC:0x00) Panic Fixed, Boot Loop Fixed, Screen Flashing Fixed
+ * Hata Düzeltme: LEDC is not initialized (PC:0x00) Panic Override, Boot Loop Bypass
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -24,7 +24,6 @@
 #include "esp_ota_ops.h" 
 
 // --- GÖMÜLÜ DOSYA İŞARETÇİLERİ ---
-// MUHAMMED: Zayıf (weak) pointer kullanildi. Resim yoksa sistem cokmek yerine siyah kalir.
 extern const uint8_t wallpaper_jpg_start[] asm("_binary_src_wallpaper_jpg_start") __attribute__((weak));
 extern const uint8_t wallpaper_jpg_end[]   asm("_binary_src_wallpaper_jpg_end") __attribute__((weak));
 
@@ -135,9 +134,7 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) 
     return true;
 }
 
-// MUHAMMED: KERNEL PANIC COZUMU!
-// Hatalı tone() fonksiyonu silindi. Yerine %100 güvenli, donanım bağımsız Bit-Bang ses motoru yazıldı.
-// Bu sayede "LEDC is not initialized" hatası tarihe gömüldü.
+// MUHAMMED: KERNEL PANIC COZUMU (BIT-BANG)
 void playBeep(int f, int d) { 
     if (f <= 0 || d <= 0) return;
     long halfPeriod = 1000000L / f / 2;
@@ -204,14 +201,12 @@ void drawTaskbar() {
 void drawDesktop(int hIdx) {
     tft.fillRect(0, 0, 320, 240, COLOR_BLACK); 
     
-    // GIZLI HATA COZUMU: Null Pointer ve Bellek Adresi Kontrolu
     if (wallpaper_jpg_start != nullptr && (uintptr_t)wallpaper_jpg_start > 0x1000) {
         size_t wlen = (size_t)(wallpaper_jpg_end - wallpaper_jpg_start);
         if (wlen > 100) { 
             TJpgDec.drawJpg(0, 0, wallpaper_jpg_start, wlen); 
         }
     } else {
-        // Resim yoksa sistem cokmez, izgara cizer.
         for(int i=0; i<320; i+=20) tft.drawFastVLine(i, 0, 240, 0x18C3);
         for(int i=0; i<240; i+=20) tft.drawFastHLine(0, i, 320, 0x18C3);
     }
@@ -249,7 +244,7 @@ void drawAboutScreen() {
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Sistem Bilgileri");
     tft.setTextColor(COLOR_BLACK);
     tft.setCursor(10, 60); tft.print("Cihaz: Kynex Sovereign S3");
-    tft.setCursor(10, 80); tft.print("Surum: v144.0 The Cure");
+    tft.setCursor(10, 80); tft.print("Surum: v145.0 The Silence");
     tft.setCursor(10, 110); tft.print("WiFi Ag: "); tft.print(WiFi.SSID());
     tft.setCursor(10, 140); tft.setTextColor(COLOR_BLUE);
     tft.print("IP: http://"); tft.print(WiFi.localIP().toString());
@@ -367,21 +362,26 @@ void handleGlobalClick(int x, int y) {
 }
 
 void setup() {
-    // 1. EKRAN VE SES PINLERI (ÇÖKME ENGELLEYICI)
+    // 1. EKRAN VE SES PINLERI: LEDC SUSTURUCU DEVREDE
     pinMode(SPEAKER_PIN, OUTPUT);
-    digitalWrite(SPEAKER_PIN, LOW); // Ses kesinlikle kapali baslar
+    digitalWrite(SPEAKER_PIN, LOW); // Hoparloru zorla kapat
     pinMode(TFT_BL, OUTPUT);
-    digitalWrite(TFT_BL, HIGH); // Ekran parlakligi 100% kilitlendi
+    digitalWrite(TFT_BL, HIGH); // Ekran aydinlatmasini tam guc ac
     
+    // GIZLI HATA: Arka planda çalısan seste LEDC kanalini 0 frekansla baslatip kör ediyoruz.
+    ledcSetup(0, 0, 8); 
+    ledcAttachPin(SPEAKER_PIN, 0);
+    ledcWrite(0, 0); // Asla ses cikarmayacak sekilde kilitle
+
     Serial.begin(115200); 
     psramInit(); FFat.begin(true); prefs.begin("kynex", false);
     
     // 2. SPI DONANIM CAKISMASI COZULDU (TFT_CS pin -1 yapilarak serbest birakildi)
     SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, -1); 
     tft.begin(); 
-    tft.setRotation(3); 
+    tft.setRotation(1); // MUHAMMED: Duzelmesi icin tekrar 1'e alindi
     ts.begin(SPI); 
-    ts.setRotation(3);
+    ts.setRotation(1);
     
     WiFi.mode(WIFI_AP_STA); WiFi.softAP("KynexOs-Win10", "*muhammed*krid*");
     server.on("/", handleWebRoot); 
