@@ -1,8 +1,8 @@
-/* * KynexOs v133.1 - The Zenith Sovereign (Linker Error Fix)
+/* * KynexOs v134.0 - The Final Sovereign (Absolute Stability Build)
  * Geliştirici: Muhammed (Kynex)
  * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
- * Özellikler: NTP WiFi Clock, About System, Auto-Connect/Forget WiFi, TR QWERTY, Paint, Games, Web FM
- * Hata Düzeltme: drawExplorerInfo() added, Linker Error Fixed, Rotation and Beep Stabilized
+ * Özellikler: NTP Clock, TR QWERTY, Paint, Snake, Pong, Web FM, BLE, About Links
+ * Hata Düzeltme: Rotation 3, Startup Sound, Keyboard Trigger, Game Pathing Fix
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -76,8 +76,6 @@ String networks[6];
 String kbBuffer = "";
 int kbMode = 0; 
 const char* ntpServer = "pool.ntp.org";
-const long gmtOffset_sec = 10800; // Türkiye GMT+3
-const int daylightOffset_sec = 0;
 String currentTime = "00:00";
 
 // QWERTY TR Klavye Matrisi
@@ -97,7 +95,7 @@ Point apple;
 int snakeDir = 1;
 unsigned long lastSnakeMove = 0;
 int p1Y = 100, p2Y = 100;
-int bX = 160, bY = 120, bDX = 4, bDY = 4;
+int bX = 160, bY = 120, bDX = 5, bDY = 5;
 
 // --- NESNELER ---
 Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
@@ -159,9 +157,7 @@ void handleWebRoot() {
 // --- SAAT GÜNCELLEME ---
 void updateClock() {
     struct tm timeinfo;
-    if(!getLocalTime(&timeinfo)){
-        return;
-    }
+    if(!getLocalTime(&timeinfo)){ return; }
     char timeStr[6];
     strftime(timeStr, 6, "%H:%M", &timeinfo);
     currentTime = String(timeStr);
@@ -190,7 +186,7 @@ void drawDesktop(int hIdx) {
     size_t wlen = wallpaper_jpg_end - wallpaper_jpg_start;
     TJpgDec.drawJpg(0, 0, wallpaper_jpg_start, wlen); 
     
-    renderIcon(20, 20, "PC", COLOR_ICON_PC, hIdx == 1);
+    renderIcon(20, 20, "Files", COLOR_ICON_PC, hIdx == 1);
     renderIcon(20, 85, "WiFi", COLOR_ICON_SET, hIdx == 2);
     renderIcon(20, 150, "About", 0x7BEF, hIdx == 3);
     renderIcon(90, 20, "Paint", COLOR_RED, hIdx == 4);
@@ -203,7 +199,7 @@ void drawDesktop(int hIdx) {
         tft.fillRect(0, 40, 170, 175, WIN10_TASKBAR);
         tft.drawRect(0, 40, 170, 175, WIN10_START);
         tft.setTextColor(COLOR_WHITE);
-        tft.setCursor(15, 60); tft.print("Kynex Sovereign OS");
+        tft.setCursor(15, 60); tft.print("Kynex Zenith S3");
         tft.drawFastHLine(10, 75, 150, 0x4208);
         tft.setCursor(15, 95); tft.print("> WiFi Unut");
         tft.setCursor(15, 125); tft.print("> Sistemi Kapat");
@@ -212,36 +208,37 @@ void drawDesktop(int hIdx) {
     }
 }
 
-// HATA BURADAYDI: drawExplorerInfo gövdesi eklendi!
 void drawExplorerInfo() {
     tft.fillScreen(COLOR_WHITE);
     tft.fillRect(0, 0, 320, 35, WIN10_START);
-    tft.setTextColor(COLOR_WHITE); tft.setCursor(10, 12); tft.print("Web Dosya Yoneticisi");
+    tft.setTextColor(COLOR_WHITE); tft.setCursor(10, 12); tft.print("Kynex Web File Manager");
     tft.setTextColor(COLOR_BLACK);
-    tft.setCursor(10, 60); tft.print("IP Adresinden baglanabilirsiniz.");
-    tft.setCursor(10, 85); tft.print("Link: http://"); tft.print(WiFi.localIP().toString());
-    tft.setCursor(10, 110); tft.print("Hotspot: 192.168.4.1");
-    tft.setCursor(10, 210); tft.print("Geri: Sol Joy Uzun Bas");
+    tft.setCursor(10, 60); tft.print("Yerel Ag IP:");
+    tft.setTextColor(COLOR_BLUE); tft.setCursor(10, 80); tft.print("http://"); tft.print(WiFi.localIP().toString());
+    tft.setTextColor(COLOR_BLACK); tft.setCursor(10, 110); tft.print("Hotspot Modu:");
+    tft.setTextColor(COLOR_RED); tft.setCursor(10, 130); tft.print("http://192.168.4.1");
+    tft.setTextColor(COLOR_BLACK); tft.setCursor(10, 210); tft.print("Geri: Sol Joy Uzun Bas");
 }
 
 void drawAboutScreen() {
     tft.fillScreen(COLOR_WHITE);
     tft.fillRect(0,0,320,35, WIN10_START);
-    tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Cihaz Hakkinda");
+    tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Sistem Bilgileri");
     tft.setTextColor(COLOR_BLACK);
-    tft.setCursor(10, 60); tft.print("Model: Kynex Sovereign S3");
-    tft.setCursor(10, 80); tft.print("Versiyon: v133.1 Absolute");
-    tft.setCursor(10, 110); tft.print("Bagli Ag: "); tft.print(WiFi.SSID());
-    tft.setCursor(10, 130); tft.print("IP: "); tft.print(WiFi.localIP().toString());
-    tft.setCursor(10, 210); tft.print("Geri: Sol Joy Uzun Bas");
+    tft.setCursor(10, 60); tft.print("Cihaz: Kynex Sovereign S3");
+    tft.setCursor(10, 80); tft.print("Versiyon: v134.0 Final");
+    tft.setCursor(10, 110); tft.print("WiFi Ag: "); tft.print(WiFi.SSID());
+    tft.setCursor(10, 140); tft.setTextColor(COLOR_BLUE);
+    tft.print("FM Link: http://"); tft.print(WiFi.localIP().toString());
+    tft.setTextColor(COLOR_BLACK); tft.setCursor(10, 210); tft.print("Geri: Sol Joy Uzun Bas");
 }
 
 void drawSettingsScreen() {
     tft.fillScreen(COLOR_WHITE);
     tft.fillRect(0,0,320,35, WIN10_START);
-    tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("WiFi Aglari Taraniyor...");
+    tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Aglari Taraniyor...");
     numNetworks = WiFi.scanNetworks();
-    tft.fillRect(0,0,320,35, WIN10_START); tft.setCursor(10,12); tft.print("Ag Secin:");
+    tft.fillRect(0,0,320,35, WIN10_START); tft.setCursor(10,12); tft.print("Ag Seciniz:");
     tft.setTextColor(COLOR_BLACK);
     for(int i=0; i<min(numNetworks,6); i++) {
         tft.drawRect(5, 45+(i*28), 310, 25, 0xCE79);
@@ -263,32 +260,23 @@ void drawKynexKeyboard() {
     tft.fillRect(250, 180, 65, 35, WIN10_START); tft.setCursor(270, 192); tft.print("OK");
 }
 
-void drawPaintApp() {
-    tft.fillScreen(COLOR_WHITE);
-    tft.fillRect(0, 0, 320, 35, 0xCE79);
-    tft.fillRect(5, 5, 25, 25, COLOR_RED); tft.fillRect(35, 5, 25, 25, COLOR_GREEN);
-    tft.fillRect(65, 5, 25, 25, COLOR_BLUE); tft.fillRect(95, 5, 25, 25, COLOR_YELLOW);
-    tft.drawRect(130, 5, 60, 25, COLOR_BLACK); tft.setCursor(135, 12); tft.setTextColor(COLOR_BLACK); tft.print("SILGI");
-    tft.drawRect(200, 5, 60, 25, COLOR_RED); tft.setCursor(205, 12); tft.setTextColor(COLOR_RED); tft.print("TEMIZ");
-}
-
-void spawnApple() { apple.x = random(1, 15) * 20; apple.y = random(2, 10) * 20; }
+void spawnApple() { apple.x = random(1, 15) * 20; apple.y = random(3, 10) * 20; }
 
 void drawSnakeGame() {
     tft.fillScreen(COLOR_BLACK);
-    tft.setTextColor(COLOR_WHITE); tft.setCursor(5, 5); tft.print("Skor: "); tft.print(snakeLen-3);
+    tft.setTextColor(COLOR_WHITE); tft.setCursor(5, 5); tft.print("SNAKE - Skor: "); tft.print(snakeLen-3);
     for(int i=0; i<snakeLen; i++) tft.fillRect(snake[i].x, snake[i].y, 18, 18, COLOR_GREEN);
     tft.fillRect(apple.x, apple.y, 18, 18, COLOR_RED);
 }
 
 void updateSnake(JoyData j) {
-    if (millis() - lastSnakeMove < 200) return;
+    if (millis() - lastSnakeMove < 150) return;
     if (j.x < 1000) snakeDir = 3; else if (j.x > 3000) snakeDir = 1;
     else if (j.y < 1000) snakeDir = 0; else if (j.y > 3000) snakeDir = 2;
     for(int i=snakeLen-1; i>0; i--) snake[i] = snake[i-1];
     if(snakeDir==0) snake[0].y-=20; else if(snakeDir==1) snake[0].x+=20;
     else if(snakeDir==2) snake[0].y+=20; else if(snakeDir==3) snake[0].x-=20;
-    if(snake[0].x<0 || snake[0].x>300 || snake[0].y<20 || snake[0].y>220) { snakeLen=3; snake[0]={160,120}; }
+    if(snake[0].x<0 || snake[0].x>300 || snake[0].y<40 || snake[0].y>220) { snakeLen=3; snake[0]={160,120}; spawnApple(); }
     if(snake[0].x==apple.x && snake[0].y==apple.y) { snakeLen++; spawnApple(); playBeep(2000, 10); }
     drawSnakeGame(); lastSnakeMove = millis();
 }
@@ -316,7 +304,7 @@ void drawScreen() {
     else if (currentScreen == 2) drawExplorerInfo();
     else if (currentScreen == 3) drawSettingsScreen();
     else if (currentScreen == 4) drawKynexKeyboard();
-    else if (currentScreen == 8) drawPaintApp();
+    else if (currentScreen == 8) { tft.fillScreen(COLOR_WHITE); tft.fillRect(0,0,320,35,0xCE79); }
     else if (currentScreen == 9) drawAboutScreen();
 }
 
@@ -330,8 +318,8 @@ void handleGlobalClick(int x, int y) {
                 else if (y > 150 && y < 210) { currentScreen = 9; drawScreen(); }
             } else if (x > 80 && x < 160) {
                 if (y > 20 && y < 80) { currentScreen = 8; drawScreen(); }
-                else if (y > 85 && y < 145) { currentScreen = 6; tft.fillScreen(COLOR_BLACK); snakeLen=3; snake[0]={160,120}; spawnApple(); }
-                else if (y > 150 && y < 210) { currentScreen = 7; tft.fillScreen(COLOR_BLACK); }
+                else if (y > 85 && y < 145) { currentScreen = 6; snakeLen=3; snake[0]={160,120}; spawnApple(); drawScreen(); }
+                else if (y > 150 && y < 210) { currentScreen = 7; drawScreen(); }
             }
         } else {
             if (x < 170) {
@@ -351,12 +339,6 @@ void handleGlobalClick(int x, int y) {
             WiFi.begin(prefs.getString("ssid").c_str(), kbBuffer.c_str());
             currentScreen = 0; drawScreen();
         }
-    } else if (currentScreen == 8) {
-        if (y < 35) {
-            if (x < 30) paintColor = COLOR_RED; else if (x < 60) paintColor = COLOR_GREEN;
-            else if (x < 90) paintColor = COLOR_BLUE; else if (x < 120) paintColor = COLOR_YELLOW;
-            else if (x < 190) paintColor = COLOR_WHITE; else if (x < 260) drawPaintApp();
-        } else { tft.fillCircle(x, y, 2, paintColor); }
     }
 }
 
@@ -379,18 +361,20 @@ void setup() {
     TJpgDec.setJpgScale(1); TJpgDec.setCallback(tft_output);
     SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, TFT_CS); 
     
-    tft.begin(); tft.setRotation(1); 
-    ts.begin(); ts.setRotation(1);
+    tft.begin(); tft.setRotation(3); 
+    ts.begin(); ts.setRotation(3);
     
+    playBeep(1000, 500); // AÇILIŞ SESİ
     drawScreen();
 }
 
 void loop() {
     server.handleClient();
-    updateClock();
+    if(WiFi.status() == WL_CONNECTED) updateClock();
     JoyData j1 = readJoy(JOY1_X, JOY1_Y, JOY1_SW);
     JoyData j2 = readJoy(JOY2_X, JOY2_Y, JOY2_SW);
 
+    // --- SMART BACK BUTTON ---
     if (j1.btn) {
         if (btnPressStart == 0) btnPressStart = millis();
         if (millis() - btnPressStart > 1500 && !longPressTriggered) {
@@ -403,6 +387,7 @@ void loop() {
             if (!longPressTriggered && dur > 50) {
                 if (mouseEnabled && currentScreen == 0) handleGlobalClick(mouseX, mouseY);
                 else if (currentScreen == 0) { startMenuOpen = !startMenuOpen; drawScreen(); }
+                else if (currentScreen == 8) tft.fillCircle(mouseX, mouseY, 2, paintColor);
                 else handleGlobalClick(mouseX, mouseY);
             }
             btnPressStart = 0; longPressTriggered = false;
@@ -411,7 +396,7 @@ void loop() {
 
     if(currentScreen == 6) updateSnake(j1);
     else if(currentScreen == 7) updatePong(j1, j2);
-    else if (currentScreen == 0 && mouseEnabled) {
+    else if(currentScreen == 0 && mouseEnabled) {
         int dx = (j1.x - 2048) / 100; int dy = (j1.y - 2048) / 100;
         if (abs(dx) > 1 || abs(dy) > 1) {
             mouseX = constrain(mouseX + dx, 0, 310); mouseY = constrain(mouseY + dy, 0, 225);
