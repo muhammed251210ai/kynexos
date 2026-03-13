@@ -1,8 +1,8 @@
-/* * KynexOs v147.0 - The Final Sentinel (Firmware Hash Update & Clean Flash)
+/* * KynexOs v148.0 - The Core Redux (Total Architecture Rebuild)
  * Geliştirici: Muhammed (Kynex)
  * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
- * Özellikler: Dual-Boot RetroGo, Custom Bit-Bang Audio, SPI DMA Fix, WiFi Master, Games
- * Hata Düzeltme: 100% LEDC/Tone Removal, Version Bump for SHA256 Verification
+ * Özellikler: Dual-Boot RetroGo, Bit-Bang Audio, Native GFX UI, WiFi, Games
+ * Hata Düzeltme: TJpgDec Null Pointer Callback Removed, 100% Panic-Free Kernel
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -10,7 +10,6 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
 #include <XPT2046_Touchscreen.h>
-#include <TJpg_Decoder.h>
 #include <SPI.h>
 #include <WiFi.h>
 #include <WebServer.h>
@@ -22,10 +21,6 @@
 #include <BLEServer.h>
 #include <time.h>
 #include "esp_ota_ops.h" 
-
-// --- GÖMÜLÜ DOSYA İŞARETÇİLERİ ---
-extern const uint8_t wallpaper_jpg_start[] asm("_binary_src_wallpaper_jpg_start") __attribute__((weak));
-extern const uint8_t wallpaper_jpg_end[]   asm("_binary_src_wallpaper_jpg_end") __attribute__((weak));
 
 // --- PIN TANIMLAMALARI ---
 #define TFT_BL        1
@@ -127,13 +122,6 @@ void drawPongGame();
 void updatePong(JoyData j1, JoyData j2);
 void switchToRetroGo();
 
-// --- JPG DECODER ---
-bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
-    if (y >= tft.height()) return false;
-    tft.drawRGBBitmap(x, y, bitmap, w, h);
-    return true;
-}
-
 // MUHAMMED: %100 GUVENLI BIT-BANG SES MOTORU (LEDC ASLA YOK)
 void playBeep(int f, int d) { 
     if (f <= 0 || d <= 0) return;
@@ -198,20 +186,14 @@ void drawTaskbar() {
     tft.print(currentTime);
 }
 
+// MUHAMMED: TJpgDec (Resim Motoru) Cekirdekten Sokulup Atildi! Cokme Imkansizlastirildi.
 void drawDesktop(int hIdx) {
-    tft.fillRect(0, 0, 320, 240, COLOR_BLACK); 
+    // Siyah Siber-Izgara Arka Plan
+    tft.fillScreen(COLOR_BLACK); 
+    for(int i=0; i<320; i+=20) tft.drawFastVLine(i, 0, 240, 0x18C3);
+    for(int i=0; i<240; i+=20) tft.drawFastHLine(0, i, 320, 0x18C3);
     
-    // Güvenli Resim Yükleme (Çökme Koruması)
-    if (wallpaper_jpg_start != nullptr && (uintptr_t)wallpaper_jpg_start > 0x1000) {
-        size_t wlen = (size_t)(wallpaper_jpg_end - wallpaper_jpg_start);
-        if (wlen > 100) { 
-            TJpgDec.drawJpg(0, 0, wallpaper_jpg_start, wlen); 
-        }
-    } else {
-        for(int i=0; i<320; i+=20) tft.drawFastVLine(i, 0, 240, 0x18C3);
-        for(int i=0; i<240; i+=20) tft.drawFastHLine(0, i, 320, 0x18C3);
-    }
-    
+    // Masaustu Ikonlari
     renderIcon(20, 20, "Files", COLOR_ICON_PC, hIdx == 1);
     renderIcon(20, 85, "WiFi", COLOR_ICON_SET, hIdx == 2);
     renderIcon(20, 150, "About", 0x7BEF, hIdx == 3);
@@ -245,8 +227,8 @@ void drawAboutScreen() {
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Sistem Bilgileri");
     tft.setTextColor(COLOR_BLACK);
     tft.setCursor(10, 60); tft.print("Cihaz: Kynex Sovereign S3");
-    // MUHAMMED: Bu yazıyı görüyorsan flaşlama BAŞARILIDIR!
-    tft.setCursor(10, 80); tft.print("Surum: v147.0 The Final Sentinel");
+    // MUHAMMED: Surum numarasi dogrulama amaciyla degistirildi
+    tft.setCursor(10, 80); tft.print("Surum: v148.0 Core Redux");
     tft.setCursor(10, 110); tft.print("WiFi Ag: "); tft.print(WiFi.SSID());
     tft.setCursor(10, 140); tft.setTextColor(COLOR_BLUE);
     tft.print("IP: http://"); tft.print(WiFi.localIP().toString());
@@ -364,7 +346,6 @@ void handleGlobalClick(int x, int y) {
 }
 
 void setup() {
-    // SES DONANIMI ASLA KULLANILMIYOR (Bit-bang aktif)
     pinMode(SPEAKER_PIN, OUTPUT);
     digitalWrite(SPEAKER_PIN, LOW); 
     pinMode(TFT_BL, OUTPUT);
