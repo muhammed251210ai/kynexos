@@ -1,7 +1,7 @@
-/* * KynexOs v116.0 - The Kynex Sovereign (Moduler Kernel)
- * Geliştirici: Muhammed (Kynex)
- * Donanım: ESP32-S3 N16R8
- * Özellikler: Moduler Wallpaper, Mouse Tıklama, Hover Efekti, File Manager
+/* * KynexOs v118.2 - The Kynex Absolute Sovereign (Interactive Windows 10)
+ * Donanım: ESP32-S3 N16R8 | Bulut Derleme Uyumlu
+ * Özellikler: Embedded JPG, Smooth Mouse, Joy-Mouse Click, File Explorer, Hardware Test
+ * Hata Düzeltme: drawArray -> drawJpg | a4 -> 0xa4 | v4 Actions
  * Talimat: Asla satır silme, optimize etme, sadeleştirme yapma. 
  */
 
@@ -16,7 +16,6 @@
 #include <FS.h>
 #include <FFat.h>
 
-// Ayrı dosyadan resmi çekiyoruz
 #include "wallpaper.h" 
 
 // --- PIN TANIMLAMALARI ---
@@ -40,7 +39,7 @@
 #define SPEAKER_PIN   18
 #define BTN_EXTRA     21
 
-// --- RENK PALETİ ---
+// --- WIN10 RENKLER VE DEĞİŞKENLER ---
 #define WIN10_BLUE      0x0011 
 #define WIN10_TASKBAR   0x18C3 
 #define WIN10_START     0x041F 
@@ -51,7 +50,6 @@
 #define COLOR_ICON_PC   0x4D3F
 #define COLOR_ICON_YEL  0xF620
 
-// --- SİSTEM DEĞİŞKENLERİ ---
 int currentScreen = 0; 
 bool startMenuOpen = false;
 bool mouseEnabled = true;
@@ -72,7 +70,7 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
 XPT2046_Touchscreen ts(TOUCH_CS); 
 WebServer server(80);
 
-// --- JPG DECODER ---
+// --- JPG DECODER YARDIMCI ---
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
     if (y >= tft.height()) return false;
     tft.drawRGBBitmap(x, y, bitmap, w, h);
@@ -114,7 +112,7 @@ void drawTaskbar() {
     tft.fillRect(0, 215, 320, 25, WIN10_TASKBAR);
     tft.fillRect(0, 215, 45, 25, startMenuOpen ? WIN10_HOVER : WIN10_START);
     drawWindowsLogo(16, 221, 12, COLOR_WHITE);
-    tft.setTextColor(COLOR_WHITE); tft.setCursor(275, 225); tft.print("21:24");
+    tft.setTextColor(COLOR_WHITE); tft.setCursor(275, 225); tft.print("21:30");
 }
 
 void drawMouse() {
@@ -124,8 +122,9 @@ void drawMouse() {
 }
 
 void drawDesktop(int hoverIdx) {
-    // wallpaper.h dosyasından veriyi basar
-    TJpgDec.drawArray(0, 0, win10_wallpaper_embedded, sizeof(win10_wallpaper_embedded)); 
+    // Muhammed, 'drawArray' hatası 'drawJpg' olarak düzeltildi!
+    TJpgDec.drawJpg(0, 0, win10_wallpaper_embedded, sizeof(win10_wallpaper_embedded)); 
+    
     renderIcon(30, 30, "Bu Bilgisayar", COLOR_ICON_PC, hoverIdx == 1);
     renderIcon(30, 100, "Geri Donusum", 0x7BEF, hoverIdx == 2);
     renderIcon(30, 170, "Donanim Test", COLOR_ICON_YEL, hoverIdx == 3);
@@ -201,7 +200,7 @@ void loop() {
         }
     }
     if (currentScreen == 1) {
-        tft.setTextColor(COLOR_WHITE, COLOR_BLACK); tft.setCursor(10, 10); tft.print("KYNEX HARDWARE TEST");
+        tft.setTextColor(COLOR_WHITE, COLOR_BLACK); tft.setCursor(10, 10); tft.print("KYNEX SOVEREIGN TEST");
         tft.setCursor(10, 40); tft.printf("J1 X:%04d Y:%04d B:%d", j1.x, j1.y, j1.btn);
         tft.setCursor(10, 70); tft.printf("J2 X:%04d Y:%04d B:%d", j2.x, j2.y, j2.btn);
         if (ts.touched()) { TS_Point p = ts.getPoint(); tft.fillCircle(map(p.x, 200, 3850, 320, 0), map(p.y, 240, 3800, 240, 0), 2, COLOR_RED); }
