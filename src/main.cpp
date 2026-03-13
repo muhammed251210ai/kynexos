@@ -1,8 +1,8 @@
-/* * KynexOs v124.0 - The Kynex Absolute Core (Final Web & FFat Integration)
+/* * KynexOs v125.0 - The Kynex Absolute Core (Direct JPG Embedding)
  * Geliştirici: Muhammed (Kynex)
- * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
- * Özellikler: Real FFat Web File Manager (Upload/Del/MkDir), Secure SoftAP, Keyboard, BLE
- * Hata Düzeltme: TJpgDec constraints explained, Full Routing for Web Server
+ * Donanım: ESP32-S3 N16R8
+ * Özellikler: Direct embed wallpaper.jpg, FFat Web FM, TR QWERTY, Secure SoftAP, BLE
+ * Hata Düzeltme: No more wallpaper.h truncation issues, flawless full screen.
  * Talimat: Asla satır silme, optimize etme, sadeleştirme yapma. 
  */
 
@@ -21,8 +21,10 @@
 #include <BLEUtils.h>
 #include <BLEServer.h>
 
-// Harici 320x240 resim verisi (Lutfen resmi 320x240 boyutlandirip oyle cevirin)
-#include "wallpaper.h" 
+// --- GÖMÜLÜ RESİM İŞARETÇİLERİ ---
+// Muhammed, src/wallpaper.jpg dosyası derleyici tarafından buraya bağlanır.
+extern const uint8_t wallpaper_jpg_start[] asm("_binary_src_wallpaper_jpg_start");
+extern const uint8_t wallpaper_jpg_end[]   asm("_binary_src_wallpaper_jpg_end");
 
 // --- PIN TANIMLAMALARI ---
 #define TFT_BL        1
@@ -33,14 +35,12 @@
 #define TFT_SCK       12
 #define TOUCH_CS      16
 #define MISO_PIN      13
-
 #define JOY1_X        4
 #define JOY1_Y        5
 #define JOY1_SW       6
 #define JOY2_X        7
 #define JOY2_Y        15
 #define JOY2_SW       17
-
 #define SPEAKER_PIN   18
 
 // --- RENK PALETİ ---
@@ -69,9 +69,7 @@ unsigned long lastAction = 0;
 int numNetworks = 0;
 String networks[6];
 String kbBuffer = "";
-int kbMode = 0; // 0: kucuk harf, 1: buyuk harf, 2: sayilar/simgeler
-
-// QWERTY TR Klavye Matrisi (12 Sutun x 4 Satir)
+int kbMode = 0; 
 String kRows[3][4] = {
   {"qwertyuiopgu", "asdfghjklsi-", "zxcvbnmoc.  ", "1^  _  <+"},
   {"QWERTYUIOPGU", "ASDFGHJKLSI-", "ZXCVBNMOC.  ", "1^  _  <+"},
@@ -83,7 +81,7 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
 XPT2046_Touchscreen ts(TOUCH_CS); 
 WebServer server(80);
 Preferences prefs;
-File fsUploadFile; // Web'den dosya yuklemek icin global obje
+File fsUploadFile; 
 
 // --- JPG DECODER ---
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
@@ -104,8 +102,7 @@ JoyData readJoy(int px, int py, int psw) {
     return d;
 }
 
-// --- GERÇEK WEB DOSYA YÖNETİCİSİ (FFAT) FONKSİYONLARI ---
-
+// --- GERÇEK WEB DOSYA YÖNETİCİSİ (FFAT) ---
 void handleWebRoot() {
     String h = "<html><head><meta charset='UTF-8'><title>Kynex Sovereign OS</title></head>";
     h += "<body style='background:#f0f2f5; font-family:sans-serif; padding:20px;'>";
@@ -130,21 +127,13 @@ void handleWebRoot() {
 }
 
 void handleFileDelete() {
-    if(server.hasArg("f")) {
-        String path = "/" + server.arg("f");
-        FFat.remove(path);
-    }
-    server.sendHeader("Location", "/");
-    server.send(303);
+    if(server.hasArg("f")) { FFat.remove("/" + server.arg("f")); }
+    server.sendHeader("Location", "/"); server.send(303);
 }
 
 void handleMkdir() {
-    if(server.hasArg("d")) {
-        String path = "/" + server.arg("d");
-        FFat.mkdir(path);
-    }
-    server.sendHeader("Location", "/");
-    server.send(303);
+    if(server.hasArg("d")) { FFat.mkdir("/" + server.arg("d")); }
+    server.sendHeader("Location", "/"); server.send(303);
 }
 
 void handleFileUpload() {
@@ -186,7 +175,16 @@ void drawTaskbar() {
 
 void drawDesktop(int hoverIdx) {
     tft.fillRect(0,0,320,240, WIN10_BLUE);
-    TJpgDec.drawJpg(0, 0, win10_wallpaper_embedded, sizeof(win10_wallpaper_embedded)); 
+
+    // --- KUSURSUZ DİNAMİK WALLPAPER ---
+    if (FFat.exists("/wallpaper.jpg")) {
+        // Eğer Web üzerinden atılan wallpaper varsa onu açar
+        TJpgDec.drawFsJpg(0, 0, "/wallpaper.jpg");
+    } else {
+        // Yoksa src içindeki gömülü resmi TAM EKRAN basar
+        size_t wallpaper_len = wallpaper_jpg_end - wallpaper_jpg_start;
+        TJpgDec.drawJpg(0, 0, wallpaper_jpg_start, wallpaper_len);
+    }
     
     renderIcon(30, 20, "Bu Bilgisayar", COLOR_ICON_PC, hoverIdx == 1);
     renderIcon(30, 85, "Aga Baglan", COLOR_ICON_SET, hoverIdx == 2);
@@ -212,23 +210,19 @@ void drawMouse() {
     tft.drawTriangle(mouseX, mouseY, mouseX+12, mouseY+12, mouseX, mouseY+16, COLOR_BLACK);
 }
 
-// --- EKRAN 2: DOSYA GEZGİNİ BİLGİSİ ---
+// --- EKRAN YARDIMCILARI ---
 void drawExplorerInfo() {
     tft.fillScreen(COLOR_WHITE);
     tft.fillRect(0, 0, 320, 35, WIN10_START);
-    tft.setTextColor(COLOR_WHITE); tft.setCursor(10, 12); tft.print("Kynex FFat Dosya Yoneticisi");
-    
+    tft.setTextColor(COLOR_WHITE); tft.setCursor(10, 12); tft.print("Kynex Web Dosya Yoneticisi");
     tft.setTextColor(COLOR_BLACK);
-    tft.setCursor(10, 60); tft.print("Dosyalara erismek icin ayni aga baglanin.");
-    tft.setCursor(10, 85); tft.print("Tarayicidan su adrese girin:");
+    tft.setCursor(10, 60); tft.print("Tarayicidan su adrese girin:");
     tft.setTextColor(COLOR_RED); tft.setTextSize(2);
-    tft.setCursor(10, 115); tft.print(WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "192.168.4.1");
-    
+    tft.setCursor(10, 100); tft.print(WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "192.168.4.1");
     tft.setTextSize(1); tft.setTextColor(COLOR_BLACK);
-    tft.setCursor(10, 200); tft.print("Cikis Icin UZUN BAS");
+    tft.setCursor(10, 200); tft.print("Masaustune donmek icin Sol Joystick UZUN BAS");
 }
 
-// --- EKRAN 3: WIFI TARAMA EKRANI ---
 void drawSettingsScreen() {
     tft.fillScreen(COLOR_WHITE);
     tft.fillRect(0, 0, 320, 35, WIN10_START);
@@ -244,16 +238,11 @@ void drawSettingsScreen() {
         tft.setCursor(10, 48 + (i*30));
         if(i < numNetworks) {
             networks[i] = WiFi.SSID(i);
-            tft.print(networks[i]);
-            tft.print(" ("); tft.print(WiFi.RSSI(i)); tft.print(" dBm)");
-        } else {
-            tft.print("...");
+            tft.print(networks[i]); tft.print(" ("); tft.print(WiFi.RSSI(i)); tft.print(" dBm)");
         }
     }
-    tft.setCursor(10, 225); tft.print("Cikis: Uzun Bas");
 }
 
-// --- EKRAN 4: QWERTY KLAVYE EKRANI ---
 void drawKynexKeyboard() {
     tft.fillScreen(COLOR_BLACK);
     tft.fillRect(0, 0, 320, 50, 0x2104);
@@ -262,8 +251,7 @@ void drawKynexKeyboard() {
     
     for(int r=0; r<4; r++) {
         for(int c=0; c<12; c++) {
-            int x = c * 26;
-            int y = 60 + (r * 40);
+            int x = c * 26; int y = 60 + (r * 40);
             tft.drawRect(x, y, 26, 40, 0x4208);
             tft.setCursor(x + 8, y + 15);
             char key = kRows[kbMode][r][c];
@@ -276,7 +264,6 @@ void drawKynexKeyboard() {
     }
 }
 
-// --- EKRAN 1: DONANIM TESTI ---
 void drawHardwareTest(JoyData j1, JoyData j2) {
     tft.fillScreen(COLOR_BLACK);
     tft.setTextColor(COLOR_WHITE);
@@ -287,11 +274,11 @@ void drawHardwareTest(JoyData j1, JoyData j2) {
         TS_Point p = ts.getPoint();
         int tx = map(p.x, 200, 3850, 320, 0); int ty = map(p.y, 240, 3800, 240, 0);
         tft.fillCircle(tx, ty, 4, COLOR_RED);
-        tft.setCursor(10, 130); tft.printf("DOKUNMA: X:%d Y:%d", tx, ty);
+        tft.setCursor(10, 130); tft.printf("DOKUNMA Noktasi: X:%d Y:%d", tx, ty);
     }
 }
 
-// --- TIKLAMA YÖNETİCİSİ (MOUSE + TOUCH) ---
+// --- TIKLAMA YÖNETİCİSİ ---
 void handleGlobalClick(int x, int y) {
     playBeep(1800, 20);
     
@@ -312,16 +299,13 @@ void handleGlobalClick(int x, int y) {
             int idx = (y - 40) / 30;
             if (idx < numNetworks) {
                 prefs.putString("ssid", networks[idx]); 
-                kbBuffer = ""; 
-                currentScreen = 4; 
-                drawKynexKeyboard();
+                kbBuffer = ""; currentScreen = 4; drawKynexKeyboard();
             }
         }
     }
     else if (currentScreen == 4) {
         if (y >= 60 && y < 220) {
-            int r = (y - 60) / 40;
-            int c = x / 26;
+            int r = (y - 60) / 40; int c = x / 26;
             if (c > 11) c = 11;
             char key = kRows[kbMode][r][c];
             
@@ -332,8 +316,7 @@ void handleGlobalClick(int x, int y) {
             else if (key == '+') { 
                 prefs.putString("pass", kbBuffer);
                 WiFi.begin(prefs.getString("ssid", "").c_str(), kbBuffer.c_str());
-                currentScreen = 0; 
-                drawDesktop(-1);
+                currentScreen = 0; drawDesktop(-1);
             }
             else if (key == '_') kbBuffer += " ";
             else if (key != ' ') kbBuffer += key;
@@ -354,17 +337,15 @@ void setup() {
     String savedPASS = prefs.getString("pass", "");
     if(savedSSID != "") WiFi.begin(savedSSID.c_str(), savedPASS.c_str());
 
-    // Muhammed, istedigin SoftAP sifresi eklendi!
+    // SoftAP Sifresi Tam Istedigin Gibi
     WiFi.softAP("Kynex-Win10", "*muhammed*krid*");
     
-    // Gercek FFat Web Yoneticisi Rotalari
     server.on("/", handleWebRoot);
     server.on("/del", handleFileDelete);
     server.on("/mkdir", handleMkdir);
     server.on("/upload", HTTP_POST, [](){ server.sendHeader("Location", "/"); server.send(303); }, handleFileUpload);
     server.begin();
 
-    // S3 Icin BLE Bluetooth 
     BLEDevice::init("Kynex-Sovereign-BLE");
     BLEServer *pServer = BLEDevice::createServer();
     BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
@@ -386,7 +367,7 @@ void setup() {
     
     playBeep(1000, 200);
     drawDesktop(-1);
-    Serial.println("KYNEXOS ABSOLUTE CORE V124 BOOTED!");
+    Serial.println("KYNEXOS ABSOLUTE CORE V125 BOOTED!");
 }
 
 // --- ANA DÖNGÜ ---
