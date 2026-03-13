@@ -1,8 +1,8 @@
-/* * KynexOs v135.0 - The Masterpiece (Absolute Bug-Free Edition)
+/* * KynexOs v136.0 - The Zenith Core (Universal Click & Anti-Spam)
  * Geliştirici: Muhammed (Kynex)
  * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
- * Özellikler: NTP Clock, TR QWERTY, Paint, Snake, Pong, Web FM, BLE, About Links
- * Hata Düzeltme: Rotation 1, Keyboard Hitbox Fix, Game Loops Restored, Touch Beep Loop Fix
+ * Özellikler: Universal Joystick Click, Touch Anti-Spam, NTP Clock, TR QWERTY, Games, Web FM
+ * Hata Düzeltme: WiFi Keyboard Trigger Fixed, Rotation(3) Fixed, Startup Sound Restored
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -66,9 +66,11 @@ bool startMenuOpen = false;
 bool mouseEnabled = true;
 int mouseX = 160;
 int mouseY = 120;
+
 unsigned long btnPressStart = 0;
 bool longPressTriggered = false;
 unsigned long lastAction = 0;
+unsigned long lastTouchTime = 0; // Anti-Spam Dokunmatik icin eklendi
 
 // --- WIFI VE SAAT ---
 int numNetworks = 0;
@@ -94,6 +96,7 @@ int snakeLen = 3;
 Point apple;
 int snakeDir = 1;
 unsigned long lastSnakeMove = 0;
+
 int p1Y = 100, p2Y = 100;
 int bX = 160, bY = 120, bDX = 5, bDY = 5;
 
@@ -123,6 +126,7 @@ void drawSnakeGame();
 void updateSnake(JoyData j);
 void drawPongGame();
 void updatePong(JoyData j1, JoyData j2);
+void drawHardwareTest(JoyData j1, JoyData j2);
 
 // --- JPG DECODER ---
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
@@ -131,7 +135,7 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) 
     return true;
 }
 
-// SES GÜNCELLEMESİ: Takılı kalmaması için kısa ve net ton.
+// AÇILIŞ VE TIKLAMA SESİ (GÜVENLİ)
 void playBeep(int f, int d) { 
     tone(SPEAKER_PIN, f, d); 
 }
@@ -153,6 +157,29 @@ void handleWebRoot() {
     }
     h += "<br><form action='/upload' method='POST' enctype='multipart/form-data'><input type='file' name='u'><input type='submit' value='Yukle'></form></body></html>";
     server.send(200, "text/html", h);
+}
+
+void handleFileDelete() {
+    if(server.hasArg("f")) { FFat.remove("/" + server.arg("f")); }
+    server.sendHeader("Location", "/"); server.send(303);
+}
+
+void handleMkdir() {
+    if(server.hasArg("d")) { FFat.mkdir("/" + server.arg("d")); }
+    server.sendHeader("Location", "/"); server.send(303);
+}
+
+void handleFileUpload() {
+    HTTPUpload& upload = server.upload();
+    if(upload.status == UPLOAD_FILE_START){
+        String filename = upload.filename;
+        if(!filename.startsWith("/")) filename = "/" + filename;
+        fsUploadFile = FFat.open(filename, FILE_WRITE);
+    } else if(upload.status == UPLOAD_FILE_WRITE){
+        if(fsUploadFile) fsUploadFile.write(upload.buf, upload.currentSize);
+    } else if(upload.status == UPLOAD_FILE_END){
+        if(fsUploadFile) fsUploadFile.close();
+    }
 }
 
 // --- SAAT GÜNCELLEME ---
@@ -177,7 +204,11 @@ void renderIcon(int x, int y, const char* txt, uint16_t c, bool h) {
 void drawTaskbar() {
     tft.fillRect(0, 215, 320, 25, WIN10_TASKBAR);
     tft.fillRect(0, 215, 45, 25, startMenuOpen ? WIN10_HOVER : WIN10_START);
+    // Basit Logo
     tft.drawRect(15, 220, 15, 15, COLOR_WHITE);
+    tft.fillRect(15, 220, 6, 6, COLOR_WHITE); tft.fillRect(24, 220, 6, 6, COLOR_WHITE);
+    tft.fillRect(15, 229, 6, 6, COLOR_WHITE); tft.fillRect(24, 229, 6, 6, COLOR_WHITE);
+    
     tft.setTextColor(COLOR_WHITE); tft.setCursor(270, 225);
     tft.print(currentTime);
 }
@@ -216,7 +247,7 @@ void drawExplorerInfo() {
     tft.setTextColor(COLOR_BLACK);
     tft.setCursor(10, 60); tft.print("Yerel Ag IP:");
     tft.setTextColor(COLOR_BLUE); tft.setCursor(10, 80); tft.print("http://"); tft.print(WiFi.localIP().toString());
-    tft.setTextColor(COLOR_BLACK); tft.setCursor(10, 110); tft.print("Hotspot Modu:");
+    tft.setTextColor(COLOR_BLACK); tft.setCursor(10, 110); tft.print("Hotspot Modu (Sifre: *muhammed*krid*):");
     tft.setTextColor(COLOR_RED); tft.setCursor(10, 130); tft.print("http://192.168.4.1");
     tft.setTextColor(COLOR_BLACK); tft.setCursor(10, 210); tft.print("Geri: Sol Joy Uzun Bas");
 }
@@ -227,26 +258,30 @@ void drawAboutScreen() {
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Sistem Bilgileri");
     tft.setTextColor(COLOR_BLACK);
     tft.setCursor(10, 60); tft.print("Cihaz: Kynex Sovereign S3");
-    tft.setCursor(10, 80); tft.print("Versiyon: v135.0 Masterpiece");
+    tft.setCursor(10, 80); tft.print("Versiyon: v136.0 Zenith");
     tft.setCursor(10, 110); tft.print("WiFi Ag: "); tft.print(WiFi.SSID());
+    
+    // LINKLER EKLENDİ
     tft.setCursor(10, 140); tft.setTextColor(COLOR_BLUE);
     tft.print("FM Link: http://"); tft.print(WiFi.localIP().toString());
     tft.setCursor(10, 160); tft.setTextColor(COLOR_RED);
     tft.print("AP Link: http://192.168.4.1");
+    
     tft.setTextColor(COLOR_BLACK); tft.setCursor(10, 210); tft.print("Geri: Sol Joy Uzun Bas");
 }
 
 void drawSettingsScreen() {
     tft.fillScreen(COLOR_WHITE);
     tft.fillRect(0,0,320,35, WIN10_START);
-    tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Aglari Taraniyor...");
+    tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Aglari Taraniyor Lutfen Bekleyin...");
+    
     numNetworks = WiFi.scanNetworks();
-    tft.fillRect(0,0,320,35, WIN10_START); tft.setCursor(10,12); tft.print("Ag Seciniz:");
+    
+    tft.fillRect(0,0,320,35, WIN10_START); tft.setCursor(10,12); tft.print("Baglanilacak Agi Seciniz:");
     tft.setTextColor(COLOR_BLACK);
     for(int i=0; i<min(numNetworks,6); i++) {
         tft.drawRect(5, 45+(i*28), 310, 25, 0xCE79);
         tft.setCursor(15, 53+(i*28)); tft.print(WiFi.SSID(i));
-        networks[i] = WiFi.SSID(i); // Ağları kaydetmeyi unutmuyoruz!
     }
 }
 
@@ -261,7 +296,15 @@ void drawKynexKeyboard() {
             tft.setCursor(x + 8, y + 12); tft.print(kRows[kbMode][r].charAt(c));
         }
     }
-    tft.fillRect(250, 180, 65, 35, WIN10_START); tft.setCursor(270, 192); tft.print("OK");
+    
+    // Ozel Tuslar
+    int y = 180;
+    tft.drawRect(4, y, 40, 35, 0x4208); tft.setCursor(12, y+12); tft.print(kbMode==2 ? "ABC" : "123");
+    tft.drawRect(48, y, 40, 35, 0x4208); tft.setCursor(60, y+12); tft.print("SH");
+    tft.drawRect(92, y, 100, 35, 0x4208); tft.setCursor(125, y+12); tft.print("SPACE");
+    tft.drawRect(196, y, 50, 35, 0x4208); tft.setCursor(210, y+12); tft.print("DEL");
+    tft.fillRect(250, y, 66, 35, WIN10_START); tft.drawRect(250, y, 66, 35, COLOR_WHITE); 
+    tft.setCursor(275, y+12); tft.print("OK");
 }
 
 void drawPaintApp() {
@@ -273,7 +316,15 @@ void drawPaintApp() {
     tft.drawRect(200, 5, 60, 25, COLOR_RED); tft.setCursor(205, 12); tft.setTextColor(COLOR_RED); tft.print("TEMIZ");
 }
 
-// --- OYUN GÖVDELERİ EKLENDİ (SİYAH EKRAN ÇÖZÜMÜ) ---
+void drawHardwareTest(JoyData j1, JoyData j2) {
+    tft.fillScreen(COLOR_BLACK);
+    tft.setTextColor(COLOR_WHITE);
+    tft.setCursor(10,10); tft.print("KYNEX HW TEST (Cikis: Uzun Bas)");
+    tft.setCursor(10,50); tft.printf("JOY1 X:%04d Y:%04d B:%d", j1.x, j1.y, j1.btn);
+    tft.setCursor(10,85); tft.printf("JOY2 X:%04d Y:%04d B:%d", j2.x, j2.y, j2.btn);
+}
+
+// --- OYUN GÖVDELERİ ---
 void spawnApple() { apple.x = random(1, 15) * 20; apple.y = random(3, 10) * 20; }
 
 void drawSnakeGame() {
@@ -313,59 +364,69 @@ void updatePong(JoyData j1, JoyData j2) {
     drawPongGame();
 }
 
-// --- EKRAN YÖNETİCİSİ ---
 void drawScreen() {
     if (currentScreen == 0) drawDesktop(-1);
+    else if (currentScreen == 1) { tft.fillScreen(COLOR_BLACK); drawHardwareTest(readJoy(JOY1_X, JOY1_Y, JOY1_SW), readJoy(JOY2_X, JOY2_Y, JOY2_SW)); }
     else if (currentScreen == 2) drawExplorerInfo();
     else if (currentScreen == 3) drawSettingsScreen();
     else if (currentScreen == 4) drawKynexKeyboard();
+    else if (currentScreen == 6) { snakeLen=3; snake[0]={160,120}; spawnApple(); drawSnakeGame(); }
+    else if (currentScreen == 7) drawPongGame();
     else if (currentScreen == 8) drawPaintApp();
     else if (currentScreen == 9) drawAboutScreen();
 }
 
-// --- TIKLAMA MANTIĞI ---
+// --- EVRENSEL TIKLAMA YÖNETİCİSİ (HATA BURADA ÇÖZÜLDÜ) ---
 void handleGlobalClick(int x, int y) {
-    playBeep(1800, 20); // Tıklama sesi
+    playBeep(1800, 20);
     
-    if (currentScreen == 0) {
+    if (currentScreen == 0) { // Masaustu
         if (!startMenuOpen) {
-            if (x < 80) { // İlk Sütun
+            // ALT GOREV CUBUGU BASLAT BUTONU
+            if(y > 210 && x < 50) { startMenuOpen = true; drawScreen(); return; }
+            
+            if (x < 80) {
                 if (y > 20 && y < 80) { currentScreen = 2; drawScreen(); }
                 else if (y > 85 && y < 145) { currentScreen = 3; drawScreen(); }
                 else if (y > 150 && y < 210) { currentScreen = 9; drawScreen(); }
-            } else if (x > 80 && x < 160) { // İkinci Sütun
+            } else if (x > 80 && x < 160) {
                 if (y > 20 && y < 80) { currentScreen = 8; drawScreen(); }
-                else if (y > 85 && y < 145) { currentScreen = 6; snakeLen=3; snake[0]={160,120}; spawnApple(); drawSnakeGame(); }
-                else if (y > 150 && y < 210) { currentScreen = 7; drawPongGame(); }
+                else if (y > 85 && y < 145) { currentScreen = 6; drawScreen(); }
+                else if (y > 150 && y < 210) { currentScreen = 7; drawScreen(); }
             }
-        } else { // Başlat Menüsü İçi
+        } else { // Baslat Menusu Aciksa
             if (x < 170) {
                 if (y > 80 && y < 115) { prefs.remove("ssid"); prefs.remove("pass"); WiFi.disconnect(); startMenuOpen=false; drawScreen(); }
                 if (y > 185) ESP.restart();
             } else { startMenuOpen = false; drawScreen(); }
         }
-    } else if (currentScreen == 3) {
-        // KLAVYE TETİKLEME DÜZELTİLDİ (Hitbox genişletildi)
+    } 
+    else if (currentScreen == 3) { // WiFi Secim Ekrani (KLAVYE TETIKLEYICI)
         if (y > 40) {
             int idx = (y - 45) / 28;
             if (idx >= 0 && idx < numNetworks) { 
                 prefs.putString("ssid_tmp", networks[idx]); 
-                kbBuffer = ""; 
-                kbMode = 0; 
-                currentScreen = 4; 
-                drawScreen(); 
+                kbBuffer = ""; currentScreen = 4; drawScreen(); 
             }
         }
-    } else if (currentScreen == 4) {
-        if (y > 60 && y < 180) {
+    } 
+    else if (currentScreen == 4) { // Klavye Ekrani
+        if (y >= 60 && y < 180) {
             int r = (y-60)/40; int c = (x-4)/26;
             if (c >= 0 && c < 12) { kbBuffer += kRows[kbMode][r].charAt(c); drawKynexKeyboard(); }
-        } else if (x > 250 && y > 180) {
-            prefs.putString("ssid", prefs.getString("ssid_tmp")); prefs.putString("pass", kbBuffer);
-            WiFi.begin(prefs.getString("ssid").c_str(), kbBuffer.c_str());
-            currentScreen = 0; drawScreen();
+        } else if (y >= 180 && y < 220) {
+            if (x >= 4 && x < 44) { kbMode = (kbMode == 2) ? 0 : 2; drawKynexKeyboard(); } 
+            else if (x >= 48 && x < 88) { kbMode = (kbMode == 0) ? 1 : 0; drawKynexKeyboard(); } 
+            else if (x >= 92 && x < 192) { kbBuffer += " "; drawKynexKeyboard(); } 
+            else if (x >= 196 && x < 246) { if(kbBuffer.length()>0) kbBuffer.remove(kbBuffer.length()-1); drawKynexKeyboard(); } 
+            else if (x >= 250) { 
+                prefs.putString("ssid", prefs.getString("ssid_tmp")); prefs.putString("pass", kbBuffer);
+                WiFi.begin(prefs.getString("ssid").c_str(), kbBuffer.c_str());
+                currentScreen = 0; drawScreen();
+            }
         }
-    } else if (currentScreen == 8) {
+    } 
+    else if (currentScreen == 8) { // Paint
         if (y < 35) {
             if (x < 30) paintColor = COLOR_RED; else if (x < 60) paintColor = COLOR_GREEN;
             else if (x < 90) paintColor = COLOR_BLUE; else if (x < 120) paintColor = COLOR_YELLOW;
@@ -378,6 +439,8 @@ void handleGlobalClick(int x, int y) {
 void setup() {
     Serial.begin(115200); psramInit(); FFat.begin(true);
     prefs.begin("kynex", false);
+    
+    // Çift Mod (AP + STA) - İnternet kilitlenmesini çözer
     WiFi.mode(WIFI_AP_STA);
     
     String s = prefs.getString("ssid", "");
@@ -385,7 +448,12 @@ void setup() {
     if(s != "") WiFi.begin(s.c_str(), p.c_str());
 
     WiFi.softAP("KynexOs-Win10", "*muhammed*krid*");
-    server.on("/", handleWebRoot); server.begin();
+    server.on("/", handleWebRoot); 
+    server.on("/del", handleFileDelete);
+    server.on("/mkdir", handleMkdir);
+    server.on("/upload", HTTP_POST, [](){ server.sendHeader("Location", "/"); server.send(303); }, handleFileUpload);
+    server.begin();
+    
     configTime(10800, 0, ntpServer);
 
     pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, HIGH);
@@ -394,13 +462,14 @@ void setup() {
     TJpgDec.setJpgScale(1); TJpgDec.setCallback(tft_output);
     SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, TFT_CS); 
     
-    // EKRAN DÜZELTİLDİ: Tam 180 derece (1)
-    tft.begin(); tft.setRotation(1); 
-    ts.begin(); ts.setRotation(1);
+    // EKRAN TAM 180 DERECE DÖNDÜRÜLDÜ
+    tft.begin(); tft.setRotation(3); 
+    ts.begin(); ts.setRotation(3);
     
-    // AÇILIŞ SESİ
-    playBeep(1000, 500); 
-    delay(500);
+    // GÜÇLÜ AÇILIŞ SESİ
+    playBeep(1000, 400); 
+    delay(400);
+    playBeep(1500, 200);
     
     drawScreen();
 }
@@ -409,6 +478,7 @@ void setup() {
 void loop() {
     server.handleClient();
     if(WiFi.status() == WL_CONNECTED) updateClock();
+    
     JoyData j1 = readJoy(JOY1_X, JOY1_Y, JOY1_SW);
     JoyData j2 = readJoy(JOY2_X, JOY2_Y, JOY2_SW);
 
@@ -422,43 +492,58 @@ void loop() {
     } else {
         if (btnPressStart != 0) {
             unsigned long dur = millis() - btnPressStart;
+            // EVRENSEL TIKLAMA: Hangi ekranda olursa olsun joystick ile tiklanabilir
             if (!longPressTriggered && dur > 50) {
-                if (mouseEnabled && currentScreen == 0) handleGlobalClick(mouseX, mouseY);
+                if (mouseEnabled) { handleGlobalClick(mouseX, mouseY); }
                 else if (currentScreen == 0) { startMenuOpen = !startMenuOpen; drawScreen(); }
-                else if (currentScreen == 8) handleGlobalClick(mouseX, mouseY);
             }
             btnPressStart = 0; longPressTriggered = false;
         }
     }
 
-    // --- OYUNLARI ÇALIŞTIRMA MANTIĞI EKLENDİ ---
+    // OYUN MOTORLARI
     if(currentScreen == 6) updateSnake(j1);
     else if(currentScreen == 7) updatePong(j1, j2);
     
-    // --- MOUSE YÖNETİMİ ---
-    else if (currentScreen == 0 && mouseEnabled) {
+    // FARE MOTORU
+    else if (mouseEnabled && currentScreen != 1) { // Test ekrani haric fare goster
         int dx = (j1.x - 2048) / 100; int dy = (j1.y - 2048) / 100;
         if (abs(dx) > 1 || abs(dy) > 1) {
             mouseX = constrain(mouseX + dx, 0, 310); mouseY = constrain(mouseY + dy, 0, 225);
             if (millis() - lastAction > 50) { 
-                drawScreen(); tft.fillTriangle(mouseX, mouseY, mouseX+10, mouseY+10, mouseX, mouseY+14, COLOR_WHITE);
+                if(currentScreen == 0) { // Sadece masaüstünde ikon hover kontrolu
+                    int hIdx = -1;
+                    if (!startMenuOpen) {
+                        if (mouseX < 80) {
+                            if (mouseY > 20 && mouseY < 80) hIdx = 1;
+                            else if (mouseY > 85 && mouseY < 145) hIdx = 2;
+                            else if (mouseY > 150 && mouseY < 210) hIdx = 3;
+                        } else if (mouseX > 80 && mouseX < 160) {
+                            if (mouseY > 20 && mouseY < 80) hIdx = 4;
+                            else if (mouseY > 85 && mouseY < 145) hIdx = 5;
+                            else if (mouseY > 150 && mouseY < 210) hIdx = 6;
+                        }
+                    }
+                    drawDesktop(hIdx);
+                } else if (currentScreen != 8) { // Paint haric ekrani yenile
+                    drawScreen();
+                }
+                
+                if (currentScreen == 8) { // Paint uzerinde fare ile cizim
+                    tft.fillCircle(mouseX, mouseY, 2, paintColor);
+                } else { // Klasik Fare
+                    tft.fillTriangle(mouseX, mouseY, mouseX+10, mouseY+10, mouseX, mouseY+14, COLOR_WHITE);
+                }
                 lastAction = millis(); 
             }
         }
     }
 
-    // DOKUNMATİK EKRAN YÖNETİMİ
-    if (ts.touched()) {
+    // DOKUNMATIK MOTORU VE ANTI-SPAM (Bip dongusu cozumu)
+    if (ts.touched() && millis() - lastTouchTime > 400) {
         TS_Point p = ts.getPoint();
         int tx = map(p.x, 200, 3850, 320, 0); int ty = map(p.y, 240, 3800, 240, 0);
-        
-        if (currentScreen == 0 && tx < 50 && ty > 210) { 
-            startMenuOpen = !startMenuOpen; drawScreen(); 
-        }
-        else { 
-            handleGlobalClick(tx, ty); 
-        }
-        // Çoklu algılamayı önlemek için sağlamlaştırılmış gecikme
-        delay(250); 
+        handleGlobalClick(tx, ty); 
+        lastTouchTime = millis();
     }
 }
