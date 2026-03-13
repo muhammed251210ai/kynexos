@@ -1,10 +1,9 @@
-name: KynexOs Sovereign Build v141.0
+name: KynexOs Sovereign Build v142.0
 
 on: [push]
 
 env:
-  # MUHAMMED: GitHub'ın istediği kritik Node.js 24 geçiş anahtarı buraya eklendi.
-  # Bu satır, kullandığın tüm eylemleri Node 24 motoruyla çalışmaya zorlar.
+  # MUHAMMED: GitHub Actions 2026 standartlarına uygun Node.js 24 ayarı
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
@@ -20,7 +19,7 @@ jobs:
           path: |
             ~/.cache/pip
             ~/.platformio
-          key: ${{ runner.os }}-platformio-v141-node24
+          key: ${{ runner.os }}-platformio-v142
 
       - name: Python Kur
         uses: actions/setup-python@v5
@@ -31,11 +30,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade platformio
+          # MUHAMMED: Bu komut firmware.bin ve partitions.bin dosyalarini otomatik uretir
           pio run
 
-      - name: Bin Dosyasini Paylas
+      - name: KynexOs Sistem Dosyalarini Paketle (Firmware + Partitions)
         uses: actions/upload-artifact@v4
         with:
-          name: KynexOs_Firmware_Immortal
-          path: .pio/build/esp32-s3-devkitc-1/firmware.bin
-          compression-level: 0
+          name: KynexOs_Complete_Package_v142
+          # MUHAMMED: Burası çok kritik! Her iki dosyayı da tek ZIP içine alır.
+          path: |
+            .pio/build/esp32-s3-devkitc-1/firmware.bin
+            .pio/build/esp32-s3-devkitc-1/partitions.bin
+            .pio/build/esp32-s3-devkitc-1/bootloader.bin
+          compression-level: 9
