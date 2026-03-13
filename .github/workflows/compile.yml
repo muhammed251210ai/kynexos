@@ -1,18 +1,18 @@
-name: KynexOs Cloud Build
+name: KynexOs Cloud Build v2
 
-on: [push] # Sen her kod yüklediğinde otomatik başlar
+on: [push]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Kodu Cek
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # v4'e güncellendi
 
       - name: Python Kur
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5 # v5'e güncellendi
         with:
-          python-version: '3.9'
+          python-version: '3.11'
 
       - name: PlatformIO Kur
         run: |
@@ -23,7 +23,7 @@ jobs:
         run: pio run
 
       - name: Bin Dosyasini Paylas
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4 # KRİTİK: v4'e güncellendi, hata burada çözüldü
         with:
-          name: KynexOs_Firmware
+          name: KynexOs_Firmware_N16R8
           path: .pio/build/esp32-s3-devkitc-1/firmware.bin
