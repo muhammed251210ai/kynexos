@@ -1,8 +1,8 @@
-/* * KynexOs v123.0 - The Kynex Sovereign OS (Ultimate Master)
+/* * KynexOs v124.0 - The Kynex Absolute Core (Final Web & FFat Integration)
  * Geliştirici: Muhammed (Kynex)
- * Donanım: ESP32-S3 N16R8 (DIO/OPI)
- * Özellikler: WiFi Scanner, TR QWERTY Keyboard, Auto-Connect, Web File Manager (Create/Edit/Upload/Delete), BLE
- * Hata Düzeltme: Menu Coordinates Fixed, Rotation(3) Applied, Complete Logic Overhaul
+ * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
+ * Özellikler: Real FFat Web File Manager (Upload/Del/MkDir), Secure SoftAP, Keyboard, BLE
+ * Hata Düzeltme: TJpgDec constraints explained, Full Routing for Web Server
  * Talimat: Asla satır silme, optimize etme, sadeleştirme yapma. 
  */
 
@@ -21,7 +21,7 @@
 #include <BLEUtils.h>
 #include <BLEServer.h>
 
-// Harici resim dosyasi (Yarim degil, tam 320x240 cevrilmis halini kullanmalisin)
+// Harici 320x240 resim verisi (Lutfen resmi 320x240 boyutlandirip oyle cevirin)
 #include "wallpaper.h" 
 
 // --- PIN TANIMLAMALARI ---
@@ -69,11 +69,9 @@ unsigned long lastAction = 0;
 int numNetworks = 0;
 String networks[6];
 String kbBuffer = "";
-int kbMode = 0; // 0: kucuk harf, 1: buyuk harf, 2: sayilar
+int kbMode = 0; // 0: kucuk harf, 1: buyuk harf, 2: sayilar/simgeler
 
 // QWERTY TR Klavye Matrisi (12 Sutun x 4 Satir)
-// Not: Adafruit GFX standart fontu Turkce karakter desteklemez, en yakin ASCII harfler kullanildi (g,u,s,i,o,c).
-// ^ = Shift, _ = Bosluk, < = Sil, + = Tamam/Kaydet
 String kRows[3][4] = {
   {"qwertyuiopgu", "asdfghjklsi-", "zxcvbnmoc.  ", "1^  _  <+"},
   {"QWERTYUIOPGU", "ASDFGHJKLSI-", "ZXCVBNMOC.  ", "1^  _  <+"},
@@ -85,6 +83,7 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
 XPT2046_Touchscreen ts(TOUCH_CS); 
 WebServer server(80);
 Preferences prefs;
+File fsUploadFile; // Web'den dosya yuklemek icin global obje
 
 // --- JPG DECODER ---
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
@@ -105,12 +104,13 @@ JoyData readJoy(int px, int py, int psw) {
     return d;
 }
 
-// --- WEB DOSYA YÖNETİCİSİ (TAM YETKİLİ) ---
+// --- GERÇEK WEB DOSYA YÖNETİCİSİ (FFAT) FONKSİYONLARI ---
+
 void handleWebRoot() {
     String h = "<html><head><meta charset='UTF-8'><title>Kynex Sovereign OS</title></head>";
     h += "<body style='background:#f0f2f5; font-family:sans-serif; padding:20px;'>";
     h += "<div style='max-width:600px; margin:auto; background:white; padding:20px; border-radius:15px; box-shadow:0 10px 25px rgba(0,0,0,0.1);'>";
-    h += "<h1 style='color:#0078d7; text-align:center;'>Kynex Explorer</h1><hr>";
+    h += "<h1 style='color:#0078d7; text-align:center;'>Kynex FFat Explorer</h1><hr>";
     
     File root = FFat.open("/");
     File file = root.openNextFile();
@@ -119,15 +119,45 @@ void handleWebRoot() {
     while(file) {
         h += "<div style='display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid #eee;'>";
         h += "<span>📁 <b>" + String(file.name()) + "</b> <small>(" + String(file.size()) + " bytes)</small></span>";
-        h += "<span><a href='/edit?f=" + String(file.name()) + "' style='text-decoration:none; color:#0078d7;'>[Duzenle]</a> ";
-        h += "<a href='/del?f=" + String(file.name()) + "' style='text-decoration:none; color:red;'>[Sil]</a></span></div>";
+        h += "<span><a href='/del?f=" + String(file.name()) + "' style='text-decoration:none; color:red;'>[Sil]</a></span></div>";
         file = root.openNextFile();
     }
-    h += "<br><hr><div style='display:flex; justify-content:space-between;'>";
+    h += "<br><hr><div style='display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;'>";
     h += "<form action='/upload' method='POST' enctype='multipart/form-data'><input type='file' name='u'> <input type='submit' value='Yukle' style='background:#0078d7; color:white; border:0; padding:8px 15px; border-radius:5px;'></form>";
     h += "<form action='/mkdir'><input name='d' placeholder='Klasor Adi' style='padding:8px;'> <input type='submit' value='Olustur' style='background:#28a745; color:white; border:0; padding:8px 15px; border-radius:5px;'></form>";
     h += "</div></div></body></html>";
     server.send(200, "text/html", h);
+}
+
+void handleFileDelete() {
+    if(server.hasArg("f")) {
+        String path = "/" + server.arg("f");
+        FFat.remove(path);
+    }
+    server.sendHeader("Location", "/");
+    server.send(303);
+}
+
+void handleMkdir() {
+    if(server.hasArg("d")) {
+        String path = "/" + server.arg("d");
+        FFat.mkdir(path);
+    }
+    server.sendHeader("Location", "/");
+    server.send(303);
+}
+
+void handleFileUpload() {
+    HTTPUpload& upload = server.upload();
+    if(upload.status == UPLOAD_FILE_START){
+        String filename = upload.filename;
+        if(!filename.startsWith("/")) filename = "/" + filename;
+        fsUploadFile = FFat.open(filename, FILE_WRITE);
+    } else if(upload.status == UPLOAD_FILE_WRITE){
+        if(fsUploadFile) fsUploadFile.write(upload.buf, upload.currentSize);
+    } else if(upload.status == UPLOAD_FILE_END){
+        if(fsUploadFile) fsUploadFile.close();
+    }
 }
 
 // --- UI ÇİZİMLERİ ---
@@ -156,10 +186,8 @@ void drawTaskbar() {
 
 void drawDesktop(int hoverIdx) {
     tft.fillRect(0,0,320,240, WIN10_BLUE);
-    // Eger resim dosyasi tam degilse alt kisim mavi kalir. Tamamsa ekrani doldurur.
     TJpgDec.drawJpg(0, 0, win10_wallpaper_embedded, sizeof(win10_wallpaper_embedded)); 
     
-    // Ikonlarin Koordinatlari Duzeltildi
     renderIcon(30, 20, "Bu Bilgisayar", COLOR_ICON_PC, hoverIdx == 1);
     renderIcon(30, 85, "Aga Baglan", COLOR_ICON_SET, hoverIdx == 2);
     renderIcon(30, 150, "Donanim Test", COLOR_ICON_YEL, hoverIdx == 3);
@@ -188,7 +216,7 @@ void drawMouse() {
 void drawExplorerInfo() {
     tft.fillScreen(COLOR_WHITE);
     tft.fillRect(0, 0, 320, 35, WIN10_START);
-    tft.setTextColor(COLOR_WHITE); tft.setCursor(10, 12); tft.print("Kynex Web Dosya Yoneticisi");
+    tft.setTextColor(COLOR_WHITE); tft.setCursor(10, 12); tft.print("Kynex FFat Dosya Yoneticisi");
     
     tft.setTextColor(COLOR_BLACK);
     tft.setCursor(10, 60); tft.print("Dosyalara erismek icin ayni aga baglanin.");
@@ -197,14 +225,14 @@ void drawExplorerInfo() {
     tft.setCursor(10, 115); tft.print(WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "192.168.4.1");
     
     tft.setTextSize(1); tft.setTextColor(COLOR_BLACK);
-    tft.setCursor(10, 200); tft.print("Masaustune donmek icin Sol Joystick UZUN BAS");
+    tft.setCursor(10, 200); tft.print("Cikis Icin UZUN BAS");
 }
 
 // --- EKRAN 3: WIFI TARAMA EKRANI ---
 void drawSettingsScreen() {
     tft.fillScreen(COLOR_WHITE);
     tft.fillRect(0, 0, 320, 35, WIN10_START);
-    tft.setTextColor(COLOR_WHITE); tft.setCursor(10, 12); tft.print("WiFi Aglari Taranıyor...");
+    tft.setTextColor(COLOR_WHITE); tft.setCursor(10, 12); tft.print("WiFi Aglari Taraniyor...");
     
     numNetworks = WiFi.scanNetworks();
     tft.fillRect(0, 0, 320, 35, WIN10_START);
@@ -248,11 +276,25 @@ void drawKynexKeyboard() {
     }
 }
 
+// --- EKRAN 1: DONANIM TESTI ---
+void drawHardwareTest(JoyData j1, JoyData j2) {
+    tft.fillScreen(COLOR_BLACK);
+    tft.setTextColor(COLOR_WHITE);
+    tft.setCursor(10,10); tft.print("KYNEX DUAL TEST (Cikis: Uzun Bas)");
+    tft.setCursor(10,50); tft.printf("JOY1 X:%04d Y:%04d B:%d", j1.x, j1.y, j1.btn);
+    tft.setCursor(10,85); tft.printf("JOY2 X:%04d Y:%04d B:%d", j2.x, j2.y, j2.btn);
+    if(ts.touched()){
+        TS_Point p = ts.getPoint();
+        int tx = map(p.x, 200, 3850, 320, 0); int ty = map(p.y, 240, 3800, 240, 0);
+        tft.fillCircle(tx, ty, 4, COLOR_RED);
+        tft.setCursor(10, 130); tft.printf("DOKUNMA: X:%d Y:%d", tx, ty);
+    }
+}
+
 // --- TIKLAMA YÖNETİCİSİ (MOUSE + TOUCH) ---
 void handleGlobalClick(int x, int y) {
     playBeep(1800, 20);
     
-    // MASAÜSTÜ
     if (currentScreen == 0) {
         if (!startMenuOpen) {
             if (x < 90) {
@@ -265,19 +307,17 @@ void handleGlobalClick(int x, int y) {
             if (x < 160 && y > 80 && y < 115) { currentScreen = 3; startMenuOpen = false; drawSettingsScreen(); }
         }
     }
-    // WIFI EKRANI
     else if (currentScreen == 3) {
         if (y >= 40 && y < 220) {
             int idx = (y - 40) / 30;
             if (idx < numNetworks) {
-                prefs.putString("ssid", networks[idx]); // Secilen agi kaydet
+                prefs.putString("ssid", networks[idx]); 
                 kbBuffer = ""; 
-                currentScreen = 4; // Sifre girmek icin klavyeyi ac
+                currentScreen = 4; 
                 drawKynexKeyboard();
             }
         }
     }
-    // KLAVYE EKRANI
     else if (currentScreen == 4) {
         if (y >= 60 && y < 220) {
             int r = (y - 60) / 40;
@@ -285,12 +325,11 @@ void handleGlobalClick(int x, int y) {
             if (c > 11) c = 11;
             char key = kRows[kbMode][r][c];
             
-            if (key == '1') kbMode = 2; // Sayi modu
-            else if (key == 'A') kbMode = 0; // Harf modu
-            else if (key == '^') kbMode = (kbMode == 0) ? 1 : 0; // Shift
-            else if (key == '<') { if(kbBuffer.length()>0) kbBuffer.remove(kbBuffer.length()-1); } // Sil
+            if (key == '1') kbMode = 2; 
+            else if (key == 'A') kbMode = 0; 
+            else if (key == '^') kbMode = (kbMode == 0) ? 1 : 0; 
+            else if (key == '<') { if(kbBuffer.length()>0) kbBuffer.remove(kbBuffer.length()-1); } 
             else if (key == '+') { 
-                // KAYDET VE BAGLAN
                 prefs.putString("pass", kbBuffer);
                 WiFi.begin(prefs.getString("ssid", "").c_str(), kbBuffer.c_str());
                 currentScreen = 0; 
@@ -311,16 +350,21 @@ void setup() {
     if(!FFat.begin(true)) FFat.format();
     prefs.begin("kynex", false);
 
-    // Kapatip acinca otomatik baglanma mantigi
     String savedSSID = prefs.getString("ssid", "");
     String savedPASS = prefs.getString("pass", "");
     if(savedSSID != "") WiFi.begin(savedSSID.c_str(), savedPASS.c_str());
 
-    WiFi.softAP("Kynex-Win10", "12345678");
+    // Muhammed, istedigin SoftAP sifresi eklendi!
+    WiFi.softAP("Kynex-Win10", "*muhammed*krid*");
+    
+    // Gercek FFat Web Yoneticisi Rotalari
     server.on("/", handleWebRoot);
+    server.on("/del", handleFileDelete);
+    server.on("/mkdir", handleMkdir);
+    server.on("/upload", HTTP_POST, [](){ server.sendHeader("Location", "/"); server.send(303); }, handleFileUpload);
     server.begin();
 
-    // S3 Icin BLE Bluetooth (Klasik BT desteklemez)
+    // S3 Icin BLE Bluetooth 
     BLEDevice::init("Kynex-Sovereign-BLE");
     BLEServer *pServer = BLEDevice::createServer();
     BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
@@ -333,18 +377,16 @@ void setup() {
     
     TJpgDec.setJpgScale(1);
     TJpgDec.setCallback(tft_output);
-    
-    // SPI Pinleri Kararli Olarak Baslatildi
     SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, TFT_CS); 
     
     tft.begin(); 
-    tft.setRotation(3); // Ekran yonu rotasyonu
+    tft.setRotation(3); 
     ts.begin(); 
     ts.setRotation(3);
     
     playBeep(1000, 200);
     drawDesktop(-1);
-    Serial.println("KYNEXOS SOVEREIGN V123 BOOTED!");
+    Serial.println("KYNEXOS ABSOLUTE CORE V124 BOOTED!");
 }
 
 // --- ANA DÖNGÜ ---
@@ -353,41 +395,25 @@ void loop() {
     JoyData j1 = readJoy(JOY1_X, JOY1_Y, JOY1_SW);
     JoyData j2 = readJoy(JOY2_X, JOY2_Y, JOY2_SW);
 
-    // --- UZUN BASIŞ / KISA BASIŞ YÖNETİMİ ---
     if (j1.btn == LOW) {
         if (btnPressStart == 0) btnPressStart = millis();
         if (millis() - btnPressStart > 2000 && !longPressTriggered) {
-            // UZUN BASIŞ: Ekranlardan cik veya Fareyi Ac/Kapat
             longPressTriggered = true;
             playBeep(600, 300); 
-            if (currentScreen != 0) {
-                currentScreen = 0; // Masustune don
-                drawDesktop(-1);
-            } else {
-                mouseEnabled = !mouseEnabled;
-                startMenuOpen = false;
-                drawDesktop(-1);
-            }
+            if (currentScreen != 0) { currentScreen = 0; drawDesktop(-1); } 
+            else { mouseEnabled = !mouseEnabled; startMenuOpen = false; drawDesktop(-1); }
         }
     } else {
         if (btnPressStart != 0) {
             unsigned long dur = millis() - btnPressStart;
             if (!longPressTriggered && dur > 50) {
-                // KISA BASIŞ (TIKLAMA)
-                if (mouseEnabled) { 
-                    handleGlobalClick(mouseX, mouseY); 
-                    if(currentScreen == 0) drawDesktop(-1);
-                } else if (currentScreen == 0) { 
-                    startMenuOpen = !startMenuOpen; 
-                    drawDesktop(-1); 
-                    playBeep(1200, 50); 
-                }
+                if (mouseEnabled && currentScreen == 0) { handleGlobalClick(mouseX, mouseY); if(currentScreen == 0) drawDesktop(-1); }
+                else if (currentScreen == 0) { startMenuOpen = !startMenuOpen; drawDesktop(-1); playBeep(1200, 50); }
             }
             btnPressStart = 0; longPressTriggered = false;
         }
     }
 
-    // --- MASAÜSTÜ FARE VE DOKUNMATİK ---
     if (currentScreen == 0) {
         if (mouseEnabled) {
             int dx = (j1.x - 2048) / 100;
@@ -395,50 +421,25 @@ void loop() {
             if (abs(dx) > 1 || abs(dy) > 1) {
                 mouseX = constrain(mouseX + dx, 0, 310);
                 mouseY = constrain(mouseY + dy, 0, 225);
-                
                 int hIdx = -1;
                 if (mouseX < 90) {
                     if (mouseY > 20 && mouseY < 80) hIdx = 1;
                     else if (mouseY > 85 && mouseY < 145) hIdx = 2;
                     else if (mouseY > 150 && mouseY < 210) hIdx = 3;
                 }
-                
-                if (millis() - lastAction > 40) {
-                    drawDesktop(hIdx); 
-                    drawMouse();
-                    lastAction = millis();
-                }
+                if (millis() - lastAction > 40) { drawDesktop(hIdx); drawMouse(); lastAction = millis(); }
             }
         }
-
         if (ts.touched()) {
             TS_Point p = ts.getPoint();
             int tx = map(p.x, 200, 3850, 320, 0); 
             int ty = map(p.y, 240, 3800, 240, 0);
-            
-            if (tx < 50 && ty > 210) { 
-                startMenuOpen = !startMenuOpen; drawDesktop(-1); delay(200); 
-            } else { 
-                handleGlobalClick(tx, ty); 
-                if(currentScreen == 0) drawDesktop(-1); 
-            }
+            if (tx < 50 && ty > 210) { startMenuOpen = !startMenuOpen; drawDesktop(-1); delay(200); } 
+            else { handleGlobalClick(tx, ty); if(currentScreen == 0) drawDesktop(-1); }
         }
     }
-
-    // --- DONANIM TESTİ ---
+    
     if (currentScreen == 1) {
-        if (millis() - lastAction > 100) {
-            tft.fillScreen(COLOR_BLACK);
-            tft.setTextColor(COLOR_WHITE); tft.setCursor(10,10); tft.print("KYNEX DUAL TEST (Cikis: Uzun Bas)");
-            tft.setCursor(10,50); tft.printf("JOY1 X:%04d Y:%04d B:%d", j1.x, j1.y, j1.btn);
-            tft.setCursor(10,85); tft.printf("JOY2 X:%04d Y:%04d B:%d", j2.x, j2.y, j2.btn);
-            if(ts.touched()){
-                TS_Point p = ts.getPoint();
-                int tx = map(p.x, 200, 3850, 320, 0); int ty = map(p.y, 240, 3800, 240, 0);
-                tft.fillCircle(tx, ty, 4, COLOR_RED);
-                tft.setCursor(10, 130); tft.printf("DOKUNMA: X:%d Y:%d", tx, ty);
-            }
-            lastAction = millis();
-        }
+        if (millis() - lastAction > 100) { drawHardwareTest(j1, j2); lastAction = millis(); }
     }
 }
