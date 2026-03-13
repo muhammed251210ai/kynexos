@@ -1,8 +1,8 @@
 /* * KynexOs v128.0 - The Perfect Core (Absolute Final Fix)
  * Geliştirici: Muhammed (Kynex)
  * Donanım: ESP32-S3 N16R8 (DIO+OPI)
- * Özellikler: Independent Keyboard Logic, Flawless Hitboxes, BLE Manager, FFat Web FM
- * Hata Düzeltme: Keyboard Char Steal Bug Fixed, Start Menu Hitboxes Fixed
+ * Özellikler: Dual WiFi Mode (AP+STA), Precise Hitboxes, BLE Manager, FFat Web FM
+ * Hata Düzeltme: WiFi Password Rejection Fixed, Start Menu Sub-tabs Fixed, Black BG for JPG
  * Talimat: Asla satır silme, optimize etme, sadeleştirme yapma. 
  */
 
@@ -66,13 +66,13 @@ unsigned long btnPressStart = 0;
 bool longPressTriggered = false;
 unsigned long lastAction = 0;
 
-// --- WIFI VE YENİ KLAVYE DEĞİŞKENLERİ ---
+// --- WIFI VE KLAVYE DEĞİŞKENLERİ ---
 int numNetworks = 0;
 String networks[6];
 String kbBuffer = "";
 int kbMode = 0; // 0: kucuk, 1: buyuk, 2: sayi/sembol
 
-// Hatasiz TR Klavye Matrisi (Sadece harfler, alt satir ozel cizilecek)
+// Hatasiz TR Klavye Matrisi
 String kRows[3][3] = {
   {"qwertyuiopgu", "asdfghjklsi-", "zxcvbnmoc.  "},
   {"QWERTYUIOPGU", "ASDFGHJKLSI-", "ZXCVBNMOC.  "},
@@ -175,10 +175,15 @@ void drawTaskbar() {
 }
 
 void drawDesktop(int hoverIdx) {
+    // MUHAMMED: Resim orantısız veya eksikse, alt taraf mavi değil SİYAH olacak (Sinematik görünüm)
     tft.fillRect(0, 0, 320, 240, COLOR_BLACK); 
     
-    size_t wallpaper_len = wallpaper_jpg_end - wallpaper_jpg_start;
-    TJpgDec.drawJpg(0, 0, wallpaper_jpg_start, wallpaper_len); 
+    if (FFat.exists("/wallpaper.jpg")) {
+        TJpgDec.drawFsJpg(0, 0, "/wallpaper.jpg");
+    } else {
+        size_t wallpaper_len = wallpaper_jpg_end - wallpaper_jpg_start;
+        TJpgDec.drawJpg(0, 0, wallpaper_jpg_start, wallpaper_len); 
+    }
     
     renderIcon(30, 20, "Bu Bilgisayar", COLOR_ICON_PC, hoverIdx == 1);
     renderIcon(30, 85, "Aga Baglan", COLOR_ICON_SET, hoverIdx == 2);
@@ -204,7 +209,7 @@ void drawMouse() {
     tft.drawTriangle(mouseX, mouseY, mouseX+12, mouseY+12, mouseX, mouseY+16, COLOR_BLACK);
 }
 
-// --- ALT EKRANLAR ---
+// --- ALT EKRANLAR (2, 3, 4, 5) ---
 void drawExplorerInfo() {
     tft.fillScreen(COLOR_WHITE);
     tft.fillRect(0, 0, 320, 35, WIN10_START);
@@ -248,7 +253,6 @@ void drawSettingsScreen() {
     }
 }
 
-// YENİDEN YAZILAN KUSURSUZ KLAVYE
 void drawKynexKeyboard() {
     tft.fillScreen(COLOR_BLACK);
     tft.fillRect(0, 0, 320, 50, 0x2104);
@@ -286,7 +290,7 @@ void drawHardwareTest(JoyData j1, JoyData j2) {
         TS_Point p = ts.getPoint();
         int tx = map(p.x, 200, 3850, 320, 0); int ty = map(p.y, 240, 3800, 240, 0);
         tft.fillCircle(tx, ty, 4, COLOR_RED);
-        tft.setCursor(10, 130); tft.printf("DOKUNMA: X:%d Y:%d", tx, ty);
+        tft.setCursor(10, 130); tft.printf("DOKUNMA Noktasi: X:%d Y:%d", tx, ty);
     }
 }
 
@@ -301,14 +305,14 @@ void handleGlobalClick(int x, int y) {
                 else if (y > 80 && y < 145) { currentScreen = 3; drawSettingsScreen(); }
                 else if (y > 145 && y < 220) { currentScreen = 1; tft.fillScreen(COLOR_BLACK); }
             }
-        } else { // Başlat Menüsü Açıkken
+        } else { // BAŞLAT MENÜSÜ ALT SEKMELERİ (HATA BURADA DÜZELTİLDİ)
             if (x < 170) {
-                if (y > 80 && y < 115) { currentScreen = 3; startMenuOpen = false; drawSettingsScreen(); } // WiFi
-                else if (y > 115 && y < 155) { currentScreen = 5; startMenuOpen = false; drawBTScreen(); } // BT
+                if (y > 75 && y < 115) { currentScreen = 3; startMenuOpen = false; drawSettingsScreen(); } // WiFi
+                else if (y > 115 && y < 155) { currentScreen = 5; startMenuOpen = false; drawBTScreen(); } // BT Ekrani Acilir
                 else if (y > 185 && y < 215) { ESP.restart(); } // Kapat
-                else { startMenuOpen = false; drawDesktop(-1); } // Boşa tıklama
+                else { startMenuOpen = false; drawDesktop(-1); } // Bosa tiklama
             } else {
-                startMenuOpen = false; drawDesktop(-1); // Menü dışı tıklama kapatır
+                startMenuOpen = false; drawDesktop(-1); // Menu disi kapatir
             }
         }
     }
@@ -321,7 +325,7 @@ void handleGlobalClick(int x, int y) {
             }
         }
     }
-    else if (currentScreen == 4) { // Klavye Dokunma Mantığı
+    else if (currentScreen == 4) { // Klavye Dokunma Mantigi
         if (y >= 60 && y < 180) { // Harfler
             int r = (y - 60) / 40; 
             int c = (x - 4) / 26;
@@ -330,12 +334,12 @@ void handleGlobalClick(int x, int y) {
                 drawKynexKeyboard();
             }
         } 
-        else if (y >= 180 && y < 220) { // Özel Fonksiyon Tuşları
+        else if (y >= 180 && y < 220) { // Ozel Fonksiyon Tuslari
             if (x >= 4 && x < 44) { kbMode = (kbMode == 2) ? 0 : 2; drawKynexKeyboard(); } // 123/ABC
             else if (x >= 48 && x < 88) { kbMode = (kbMode == 0) ? 1 : 0; drawKynexKeyboard(); } // SHIFT
             else if (x >= 92 && x < 192) { kbBuffer += " "; drawKynexKeyboard(); } // SPACE
             else if (x >= 196 && x < 246) { if(kbBuffer.length()>0) kbBuffer.remove(kbBuffer.length()-1); drawKynexKeyboard(); } // DEL
-            else if (x >= 250) { // OK (KAYDET VE BAĞLAN)
+            else if (x >= 250) { // OK (KAYDET VE BAGLAN)
                 prefs.putString("pass", kbBuffer);
                 WiFi.begin(prefs.getString("ssid", "").c_str(), kbBuffer.c_str());
                 currentScreen = 0; drawDesktop(-1);
@@ -350,6 +354,9 @@ void setup() {
     psramInit();
     if(!FFat.begin(true)) FFat.format();
     prefs.begin("kynex", false);
+
+    // HATA ÇÖZÜMÜ: ÇİFT MOD AKTİF EDİLDİ (Hem AP hem STA sorunsuz çalışır)
+    WiFi.mode(WIFI_AP_STA);
 
     String savedSSID = prefs.getString("ssid", "");
     String savedPASS = prefs.getString("pass", "");
