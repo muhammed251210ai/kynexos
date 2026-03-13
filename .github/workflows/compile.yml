@@ -1,4 +1,4 @@
-name: KynexOs Sovereign Build
+name: KynexOs Sovereign Build v123
 
 on: [push]
 
@@ -9,13 +9,13 @@ jobs:
       - name: Kodu Cek
         uses: actions/checkout@v4
 
-      - name: PlatformIO Onbellegini Kur
+      - name: PlatformIO Onbellegini Kuru
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/pip
             ~/.platformio
-          key: ${{ runner.os }}-platformio-permanent-v4
+          key: ${{ runner.os }}-platformio-permanent-v123
 
       - name: Python Kur
         uses: actions/setup-python@v5
@@ -31,6 +31,6 @@ jobs:
       - name: Bin Dosyasini Paylas
         uses: actions/upload-artifact@v4
         with:
-          name: KynexOs_Firmware_Bin_Inside
+          name: KynexOs_Firmware_Absolute
           path: .pio/build/esp32-s3-devkitc-1/firmware.bin
-          compression-level: 0 # Zip icindeki dosyayi sıkıştırmaz, daha hızlı cıkar
+          compression-level: 0
