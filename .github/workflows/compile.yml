@@ -1,4 +1,4 @@
-name: KynexOs Cloud Build v2
+name: KynexOs Sovereign Build
 
 on: [push]
 
@@ -7,10 +7,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Kodu Cek
-        uses: actions/checkout@v4 # v4'e güncellendi
+        uses: actions/checkout@v4
 
       - name: Python Kur
-        uses: actions/setup-python@v5 # v5'e güncellendi
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -19,11 +19,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade platformio
 
-      - name: KynexOs Derle (Turbo)
+      - name: KynexOs Derle
         run: pio run
 
       - name: Bin Dosyasini Paylas
-        uses: actions/upload-artifact@v4 # KRİTİK: v4'e güncellendi, hata burada çözüldü
+        uses: actions/upload-artifact@v4
         with:
           name: KynexOs_Firmware_N16R8
           path: .pio/build/esp32-s3-devkitc-1/firmware.bin
