@@ -1,4 +1,4 @@
-name: KynexOs Sovereign Build
+name: KynexOs Turbo Build
 
 on: [push]
 
@@ -8,6 +8,14 @@ jobs:
     steps:
       - name: Kodu Cek
         uses: actions/checkout@v4
+
+      - name: PlatformIO Onbellegini Yukle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio
+          key: ${{ runner.os }}-pio
 
       - name: Python Kur
         uses: actions/setup-python@v5
@@ -25,5 +33,5 @@ jobs:
       - name: Bin Dosyasini Paylas
         uses: actions/upload-artifact@v4
         with:
-          name: KynexOs_Firmware_N16R8
+          name: KynexOs_Firmware
           path: .pio/build/esp32-s3-devkitc-1/firmware.bin
