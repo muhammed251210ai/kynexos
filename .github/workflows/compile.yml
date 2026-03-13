@@ -1,4 +1,4 @@
-name: KynexOs Sovereign Build v123
+name: KynexOs Sovereign Build v123.2
 
 on: [push]
 
@@ -9,13 +9,13 @@ jobs:
       - name: Kodu Cek
         uses: actions/checkout@v4
 
-      - name: PlatformIO Onbellegini Kuru
+      - name: PlatformIO Onbellegini Kur
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/pip
             ~/.platformio
-          key: ${{ runner.os }}-platformio-permanent-v123
+          key: ${{ runner.os }}-platformio-v123-2
 
       - name: Python Kur
         uses: actions/setup-python@v5
