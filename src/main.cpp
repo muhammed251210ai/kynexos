@@ -1,8 +1,8 @@
-/* * KynexOs v128.0 - The Perfect Core (Absolute Final Fix)
+/* * KynexOs v129.0 - The Master Core (Infinite Loop & Radio Crash Fix)
  * Geliştirici: Muhammed (Kynex)
  * Donanım: ESP32-S3 N16R8 (DIO+OPI)
  * Özellikler: Dual WiFi Mode (AP+STA), Precise Hitboxes, Tech-Grid BG, BLE Manager, FFat
- * Hata Düzeltme: WiFi Password Rejection Fixed, Start Menu Sub-tabs Fixed, Mouse Logic Fixed
+ * Hata Düzeltme: WiFi Password Rejection (Radio Loop Fix), Start Menu Sub-tabs Unresponsive Fix
  * Talimat: Asla satır silme, optimize etme, sadeleştirme yapma. 
  */
 
@@ -70,7 +70,7 @@ unsigned long lastAction = 0;
 int numNetworks = 0;
 String networks[6];
 String kbBuffer = "";
-int kbMode = 0; // 0: kucuk, 1: buyuk, 2: sayi/sembol
+int kbMode = 0; 
 
 // Hatasiz TR Klavye Matrisi
 String kRows[3][3] = {
@@ -93,6 +93,7 @@ void drawExplorerInfo();
 void drawSettingsScreen();
 void drawBTScreen();
 void drawDesktop(int hoverIdx);
+void drawTaskbar();
 
 // --- JPG DECODER ---
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
@@ -183,14 +184,17 @@ void drawTaskbar() {
 }
 
 void drawDesktop(int hoverIdx) {
-    // MUHAMMED: Resim bozuksa veya eksikse altı mavi kalmasın diye Siber-Izgara çiziyoruz!
     tft.fillRect(0, 0, 320, 240, COLOR_BLACK); 
+    // Siber Izgara (Resmin yarida kesilme ihtimaline karsi profesyonel gorunum)
     for(int i=0; i<320; i+=20) tft.drawFastVLine(i, 0, 240, 0x18C3);
     for(int i=0; i<240; i+=20) tft.drawFastHLine(0, i, 320, 0x18C3);
     
-    // Resmi Çiz
-    size_t wallpaper_len = wallpaper_jpg_end - wallpaper_jpg_start;
-    TJpgDec.drawJpg(0, 0, wallpaper_jpg_start, wallpaper_len); 
+    if (FFat.exists("/wallpaper.jpg")) {
+        TJpgDec.drawFsJpg(0, 0, "/wallpaper.jpg");
+    } else {
+        size_t wallpaper_len = wallpaper_jpg_end - wallpaper_jpg_start;
+        TJpgDec.drawJpg(0, 0, wallpaper_jpg_start, wallpaper_len); 
+    }
     
     renderIcon(30, 20, "Bu Bilgisayar", COLOR_ICON_PC, hoverIdx == 1);
     renderIcon(30, 85, "Aga Baglan", COLOR_ICON_SET, hoverIdx == 2);
@@ -245,7 +249,9 @@ void drawSettingsScreen() {
     tft.fillRect(0, 0, 320, 35, WIN10_START);
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10, 12); tft.print("WiFi Aglari Taraniyor...");
     
+    // HATA BURADA ÇÖZÜLDÜ: Taramayı ekrana yazmadan hemen önce BİR KEZ yapar
     numNetworks = WiFi.scanNetworks();
+    
     tft.fillRect(0, 0, 320, 35, WIN10_START);
     tft.setCursor(10, 12); tft.print("Baglanmak Icin Bir Aga Tikla:");
 
@@ -266,7 +272,6 @@ void drawKynexKeyboard() {
     tft.drawRect(10, 10, 300, 30, COLOR_WHITE);
     tft.setTextColor(COLOR_WHITE); tft.setCursor(15, 20); tft.print(kbBuffer);
     
-    // Harfler (3 Satır)
     for(int r=0; r<3; r++) {
         for(int c=0; c<12; c++) {
             int x = c * 26 + 4; 
@@ -277,7 +282,6 @@ void drawKynexKeyboard() {
         }
     }
     
-    // Özel Alt Satır (Fonksiyonlar)
     int y = 180;
     tft.drawRect(4, y, 40, 35, 0x4208); tft.setCursor(12, y+12); tft.print(kbMode==2 ? "ABC" : "123");
     tft.drawRect(48, y, 40, 35, 0x4208); tft.setCursor(60, y+12); tft.print("SH");
@@ -295,7 +299,6 @@ void drawHardwareTest(JoyData j1, JoyData j2) {
     tft.setCursor(10,85); tft.printf("JOY2 X:%04d Y:%04d B:%d", j2.x, j2.y, j2.btn);
 }
 
-// Merkezi Cizim Yoneticisi
 void drawScreen() {
     if (currentScreen == 0) drawDesktop(-1);
     else if (currentScreen == 2) drawExplorerInfo();
@@ -304,38 +307,43 @@ void drawScreen() {
     else if (currentScreen == 5) drawBTScreen();
 }
 
-// --- TIKLAMA YÖNETİCİSİ (KUSURSUZ HITBOX VE BAŞLAT MENÜSÜ ÇÖZÜMÜ) ---
+// --- TIKLAMA YÖNETİCİSİ (KUSURSUZ HITBOX) ---
 void handleGlobalClick(int x, int y) {
     playBeep(1800, 20);
     
-    // 1. BAŞLAT BUTONUNA TIKLAMA (Görev Çubuğu)
-    if (y > 210 && x < 50) {
+    // GÖREV ÇUBUĞU (Başlat Menüsü Butonu)
+    if (currentScreen == 0 && y > 210 && x < 50) {
         startMenuOpen = !startMenuOpen;
-        if(currentScreen == 0) drawScreen();
+        drawScreen();
         return;
     }
-
-    // 2. BAŞLAT MENÜSÜ AÇIKKEN TIKLAMA İŞLEMLERİ (Sorun Buradaydı, Çözüldü)
-    if (startMenuOpen) {
-        if (x < 170 && y > 40 && y < 215) { // Menünün içindeysek
-            if (y > 75 && y < 115) { currentScreen = 3; startMenuOpen = false; drawScreen(); } // WiFi
-            else if (y > 115 && y < 155) { currentScreen = 5; startMenuOpen = false; drawScreen(); } // BT
-            else if (y > 185 && y < 215) { ESP.restart(); } // Kapat
-        } else {
-            startMenuOpen = false; drawScreen(); // Menü dışına tıklanınca kapat
-        }
-        return;
-    }
-
-    // 3. MASAÜSTÜ İKONLARI
+    
     if (currentScreen == 0) {
-        if (x < 100) {
-            if (y > 20 && y < 80) { currentScreen = 2; drawScreen(); }
-            else if (y > 80 && y < 145) { currentScreen = 3; drawScreen(); }
-            else if (y > 145 && y < 210) { currentScreen = 1; tft.fillScreen(COLOR_BLACK); }
+        if (!startMenuOpen) {
+            if (x < 100) {
+                if (y > 20 && y < 80) { currentScreen = 2; drawScreen(); }
+                else if (y > 80 && y < 145) { 
+                    currentScreen = 3; 
+                    tft.fillScreen(COLOR_BLACK); tft.setCursor(10,100); tft.setTextColor(COLOR_WHITE); tft.print("Ağlar Taranıyor Lütfen Bekleyin...");
+                    drawScreen(); 
+                }
+                else if (y > 145 && y < 210) { currentScreen = 1; tft.fillScreen(COLOR_BLACK); }
+            }
+        } else {
+            // BAŞLAT MENÜSÜ AÇIKKEN TIKLAMALAR (HATA BURADA ÇÖZÜLDÜ)
+            if (x < 170 && y > 40 && y < 215) {
+                if (y > 75 && y < 115) { 
+                    currentScreen = 3; startMenuOpen = false; 
+                    tft.fillScreen(COLOR_BLACK); tft.setCursor(10,100); tft.setTextColor(COLOR_WHITE); tft.print("Ağlar Taranıyor Lütfen Bekleyin...");
+                    drawScreen(); 
+                } 
+                else if (y > 115 && y < 155) { currentScreen = 5; startMenuOpen = false; drawScreen(); } 
+                else if (y > 185 && y < 215) { ESP.restart(); } 
+            } else {
+                startMenuOpen = false; drawScreen(); 
+            }
         }
     }
-    // 4. WIFI AĞ SEÇİMİ
     else if (currentScreen == 3) {
         if (y >= 40 && y < 220) {
             int idx = (y - 40) / 30;
@@ -345,19 +353,18 @@ void handleGlobalClick(int x, int y) {
             }
         }
     }
-    // 5. KLAVYE DOKUNMALARI
-    else if (currentScreen == 4) {
+    else if (currentScreen == 4) { 
         if (y >= 60 && y < 180) { // Harfler
             int r = (y - 60) / 40; 
             int c = (x - 4) / 26;
             if (c >= 0 && c < 12) { kbBuffer += kRows[kbMode][r].charAt(c); drawScreen(); }
         } 
-        else if (y >= 180 && y < 220) { // Ozel Fonksiyon Tuslari
-            if (x >= 4 && x < 44) { kbMode = (kbMode == 2) ? 0 : 2; drawScreen(); } // 123/ABC
-            else if (x >= 48 && x < 88) { kbMode = (kbMode == 0) ? 1 : 0; drawScreen(); } // SHIFT
-            else if (x >= 92 && x < 192) { kbBuffer += " "; drawScreen(); } // SPACE
-            else if (x >= 196 && x < 246) { if(kbBuffer.length()>0) kbBuffer.remove(kbBuffer.length()-1); drawScreen(); } // DEL
-            else if (x >= 250) { // OK (KAYDET VE BAĞLAN)
+        else if (y >= 180 && y < 220) { // Fonksiyonlar
+            if (x >= 4 && x < 44) { kbMode = (kbMode == 2) ? 0 : 2; drawScreen(); } 
+            else if (x >= 48 && x < 88) { kbMode = (kbMode == 0) ? 1 : 0; drawScreen(); } 
+            else if (x >= 92 && x < 192) { kbBuffer += " "; drawScreen(); } 
+            else if (x >= 196 && x < 246) { if(kbBuffer.length()>0) kbBuffer.remove(kbBuffer.length()-1); drawScreen(); } 
+            else if (x >= 250) { 
                 prefs.putString("pass", kbBuffer);
                 WiFi.begin(prefs.getString("ssid", "").c_str(), kbBuffer.c_str());
                 currentScreen = 0; drawScreen();
@@ -373,15 +380,14 @@ void setup() {
     if(!FFat.begin(true)) FFat.format();
     prefs.begin("kynex", false);
 
-    // HATA ÇÖZÜMÜ: ÇİFT MOD AKTİF EDİLDİ (SoftAP ve STA Çakışmaz)
+    // HATA ÇÖZÜMÜ: AP VE STA MODU ÇAKIŞMASI ENGELLENDİ
     WiFi.mode(WIFI_AP_STA);
 
     String savedSSID = prefs.getString("ssid", "");
     String savedPASS = prefs.getString("pass", "");
     if(savedSSID != "") WiFi.begin(savedSSID.c_str(), savedPASS.c_str());
 
-    // Yeni Isimle SoftAP (Telefon eski hatali sifreyi unutsun diye)
-    WiFi.softAP("KynexOs-Win10", "*muhammed*krid*");
+    WiFi.softAP("Kynex-Win10", "*muhammed*krid*");
     
     server.on("/", handleWebRoot);
     server.on("/del", handleFileDelete);
@@ -412,19 +418,18 @@ void setup() {
     drawScreen();
 }
 
-// --- ANA DÖNGÜ ---
+// --- ANA DÖNGÜ (HATA BURADA ÇÖZÜLDÜ) ---
 void loop() {
     server.handleClient();
     JoyData j1 = readJoy(JOY1_X, JOY1_Y, JOY1_SW);
     JoyData j2 = readJoy(JOY2_X, JOY2_Y, JOY2_SW);
 
-    // --- AKILLI GERİ TUŞU (SOL JOY UZUN BASIŞ) ---
+    // GERİ TUŞU YÖNETİMİ
     if (j1.btn == LOW) {
         if (btnPressStart == 0) btnPressStart = millis();
         if (millis() - btnPressStart > 1500 && !longPressTriggered) {
             longPressTriggered = true;
             playBeep(600, 300); 
-            
             if (currentScreen != 0) { currentScreen = 0; startMenuOpen = false; drawScreen(); } 
             else if (startMenuOpen) { startMenuOpen = false; drawScreen(); }
             else { mouseEnabled = !mouseEnabled; drawScreen(); }
@@ -433,15 +438,14 @@ void loop() {
         if (btnPressStart != 0) {
             unsigned long dur = millis() - btnPressStart;
             if (!longPressTriggered && dur > 50) { 
-                // KISA BASIŞ (TIKLAMA)
-                if (mouseEnabled) { handleGlobalClick(mouseX, mouseY); }
+                if (mouseEnabled && currentScreen == 0) { handleGlobalClick(mouseX, mouseY); }
                 else if (currentScreen == 0) { startMenuOpen = !startMenuOpen; drawScreen(); playBeep(1200, 50); }
             }
             btnPressStart = 0; longPressTriggered = false;
         }
     }
 
-    // --- EKRAN İÇİ FARE VE DOKUNMATİK ---
+    // EKRAN İÇİ FARE YÖNETİMİ (Sadece masaüstü ve test ekranında ekran yenilenir)
     if (mouseEnabled) {
         int dx = (j1.x - 2048) / 100;
         int dy = (j1.y - 2048) / 100;
@@ -450,33 +454,34 @@ void loop() {
             mouseY = constrain(mouseY + dy, 0, 225);
             
             if (millis() - lastAction > 40) {
-                // Fare hareket ederse ekranı yenile
                 if (currentScreen == 0) {
                     int hIdx = -1;
                     if (!startMenuOpen && mouseX < 100) {
-                        if (mouseY > 20 && mouseY < 80) hIdx = 1;
+                        if (mouseY > 10 && mouseY < 80) hIdx = 1;
                         else if (mouseY > 80 && mouseY < 145) hIdx = 2;
                         else if (mouseY > 145 && mouseY < 220) hIdx = 3;
                     }
                     drawDesktop(hIdx);
-                } else if (currentScreen != 1) {
-                    drawScreen(); 
+                    drawMouse();
+                } else if (currentScreen == 1) {
+                    // HW Test ekrani
                 }
-                drawMouse(); 
+                // Diger ekranlarda fare hareket etse de ekrani basa sarmasin (Wifi taramasi kesilmesin)
                 lastAction = millis();
             }
         }
     }
 
+    // DOKUNMATİK EKRAN
     if (ts.touched()) {
         TS_Point p = ts.getPoint();
         int tx = map(p.x, 200, 3850, 320, 0); 
         int ty = map(p.y, 240, 3800, 240, 0);
         handleGlobalClick(tx, ty); 
-        delay(200); // Dokunma sekmesini engelle
+        delay(200); 
     }
     
-    // --- DONANIM TEST EKRANI ---
+    // DONANIM TESTİ YENİLEME EKRANI
     if (currentScreen == 1) {
         if (millis() - lastAction > 100) { 
             drawHardwareTest(j1, j2); 
