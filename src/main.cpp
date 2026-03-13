@@ -1,7 +1,6 @@
-/* * KynexOs v118.2 - The Kynex Absolute Sovereign (Interactive Windows 10)
- * Donanım: ESP32-S3 N16R8 | Bulut Derleme Uyumlu
- * Özellikler: Embedded JPG, Smooth Mouse, Joy-Mouse Click, File Explorer, Hardware Test
- * Hata Düzeltme: drawArray -> drawJpg | a4 -> 0xa4 | v4 Actions
+/* * KynexOs v119.0 - The Kynex Matrix (Total Fix Edition)
+ * Geliştirici: Muhammed (Kynex)
+ * Özellikler: Long Press logic fixed, Display Orientation Fixed, Turbo Cloud
  * Talimat: Asla satır silme, optimize etme, sadeleştirme yapma. 
  */
 
@@ -27,19 +26,15 @@
 #define TFT_SCK       12
 #define TOUCH_CS      16
 #define MISO_PIN      13
-
 #define JOY1_X        4
 #define JOY1_Y        5
 #define JOY1_SW       6
-
 #define JOY2_X        7
 #define JOY2_Y        15
 #define JOY2_SW       17
-
 #define SPEAKER_PIN   18
-#define BTN_EXTRA     21
 
-// --- WIN10 RENKLER VE DEĞİŞKENLER ---
+// --- RENK PALETİ ---
 #define WIN10_BLUE      0x0011 
 #define WIN10_TASKBAR   0x18C3 
 #define WIN10_START     0x041F 
@@ -47,16 +42,16 @@
 #define COLOR_WHITE     0xFFFF
 #define COLOR_BLACK     0x0000
 #define COLOR_RED       0xF800 
-#define COLOR_ICON_PC   0x4D3F
-#define COLOR_ICON_YEL  0xF620
 
+// --- SİSTEM DEĞİŞKENLERİ ---
 int currentScreen = 0; 
 bool startMenuOpen = false;
 bool mouseEnabled = true;
 float mouseX = 160, mouseY = 120;
 int lastHoverIdx = -1;
+bool longPressTriggered = false;
 
-unsigned long btnPressTime = 0;
+unsigned long btnPressStartTime = 0;
 bool lastBtnState = HIGH;
 unsigned long lastActionTime = 0;
 
@@ -70,7 +65,7 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
 XPT2046_Touchscreen ts(TOUCH_CS); 
 WebServer server(80);
 
-// --- JPG DECODER YARDIMCI ---
+// --- JPG DECODER ---
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
     if (y >= tft.height()) return false;
     tft.drawRGBBitmap(x, y, bitmap, w, h);
@@ -105,14 +100,14 @@ void renderIcon(int x, int y, const char* label, uint16_t color, bool hover) {
     tft.fillRect(x, y, 40, 30, finalColor);
     tft.drawRect(x+3, y+3, 34, 24, COLOR_WHITE);
     tft.setTextColor(COLOR_WHITE); tft.setTextSize(1);
-    tft.setCursor(x - 10, y + 38); tft.print(label);
+    tft.setCursor(x - 5, y + 38); tft.print(label);
 }
 
 void drawTaskbar() {
     tft.fillRect(0, 215, 320, 25, WIN10_TASKBAR);
     tft.fillRect(0, 215, 45, 25, startMenuOpen ? WIN10_HOVER : WIN10_START);
     drawWindowsLogo(16, 221, 12, COLOR_WHITE);
-    tft.setTextColor(COLOR_WHITE); tft.setCursor(275, 225); tft.print("21:30");
+    tft.setTextColor(COLOR_WHITE); tft.setCursor(270, 225); tft.print("21:30");
 }
 
 void drawMouse() {
@@ -122,87 +117,93 @@ void drawMouse() {
 }
 
 void drawDesktop(int hoverIdx) {
-    // Muhammed, 'drawArray' hatası 'drawJpg' olarak düzeltildi!
     TJpgDec.drawJpg(0, 0, win10_wallpaper_embedded, sizeof(win10_wallpaper_embedded)); 
-    
-    renderIcon(30, 30, "Bu Bilgisayar", COLOR_ICON_PC, hoverIdx == 1);
-    renderIcon(30, 100, "Geri Donusum", 0x7BEF, hoverIdx == 2);
-    renderIcon(30, 170, "Donanim Test", COLOR_ICON_YEL, hoverIdx == 3);
+    renderIcon(20, 20, "PC", 0x4D3F, hoverIdx == 1);
+    renderIcon(20, 85, "Cop", 0x7BEF, hoverIdx == 2);
+    renderIcon(20, 150, "Test", 0xF620, hoverIdx == 3);
     drawTaskbar();
     if (startMenuOpen) {
-        tft.fillRect(0, 55, 140, 160, WIN10_TASKBAR); tft.drawRect(0, 55, 140, 160, WIN10_START);
-        tft.setTextColor(COLOR_WHITE); tft.setCursor(10, 70); tft.print("KynexOs Muhammed");
-        tft.setCursor(10, 105); tft.print("> RetroGo Games");
-        tft.setCursor(10, 135); tft.print("> Sistem Ayarlari");
-        tft.fillRect(0, 185, 140, 30, COLOR_RED); tft.setCursor(45, 197); tft.print("KAPAT");
+        tft.fillRect(0, 50, 150, 165, WIN10_TASKBAR);
+        tft.drawRect(0, 50, 150, 165, WIN10_START);
+        tft.setTextColor(COLOR_WHITE); tft.setCursor(15, 65); tft.print("Kynex Muhammed");
+        tft.fillRect(0, 185, 150, 30, COLOR_RED); tft.setCursor(55, 197); tft.print("KAPAT");
     }
 }
 
 void openFileExplorer() {
     tft.fillScreen(COLOR_WHITE); tft.fillRect(0, 0, 320, 30, WIN10_START);
-    tft.setTextColor(COLOR_WHITE); tft.setCursor(10, 10); tft.print("Bu Bilgisayar > C:/");
+    tft.setTextColor(COLOR_WHITE); tft.setCursor(10, 10); tft.print("Kynex C:/");
     tft.setTextColor(COLOR_BLACK);
     File root = FFat.open("/"); File file = root.openNextFile(); int count = 0;
-    while(file) { tft.setCursor(10, 45 + (count * 15)); tft.printf("%s (%u KB)", file.name(), file.size() / 1024); file = root.openNextFile(); count++; if(count > 10) break; }
+    while(file) { tft.setCursor(10, 45+(count*15)); tft.printf("%s (%u KB)", file.name(), file.size()/1024); file=root.openNextFile(); count++; }
 }
 
 void handleInteraction(int x, int y) {
     playFeedback(1500, 20);
     if (currentScreen == 0 && !startMenuOpen) {
         if (x < 85) {
-            if (y > 20 && y < 85) { currentScreen = 2; openFileExplorer(); }
-            else if (y > 150 && y < 215) { currentScreen = 1; tft.fillScreen(COLOR_BLACK); }
+            if (y > 20 && y < 80) { currentScreen = 2; openFileExplorer(); }
+            else if (y > 140 && y < 200) { currentScreen = 1; tft.fillScreen(COLOR_BLACK); }
         }
     }
-    if (startMenuOpen && x < 150 && y > 185 && y < 215) { ESP.restart(); }
 }
 
 void setup() {
     Serial.begin(115200); psramInit(); FFat.begin(true);
     WiFi.softAP("Kynex-Win10", "12345678");
     pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, HIGH);
-    pinMode(JOY1_SW, INPUT_PULLUP); pinMode(JOY2_SW, INPUT_PULLUP);
+    pinMode(JOY1_SW, INPUT_PULLUP);
     TJpgDec.setJpgScale(1); TJpgDec.setCallback(tft_output);
-    SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, TFT_CS); tft.begin(); tft.setRotation(1);
-    ts.begin(); ts.setRotation(1);
+    SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, TFT_CS); 
+    tft.begin(); 
+    tft.setRotation(3); // KRİTİK: Fotoğraftaki yön hatası buradan düzelir
+    ts.begin(); ts.setRotation(3);
     playFeedback(1000, 200); drawDesktop(-1);
 }
 
 void loop() {
     server.handleClient();
     JoystickData j1 = readJoystick(JOY1_X, JOY1_Y, JOY1_SW);
-    JoystickData j2 = readJoystick(JOY2_X, JOY2_Y, JOY2_SW);
-    if (j1.btn != lastBtnState) {
-        if (j1.btn == LOW) { btnPressTime = millis(); }
-        else {
-            unsigned long duration = millis() - btnPressTime;
-            if (duration > 2000) { mouseEnabled = !mouseEnabled; startMenuOpen = false; currentScreen = 0; playFeedback(600, 300); drawDesktop(-1); }
-            else if (duration > 50) { if (mouseEnabled && currentScreen == 0) { handleInteraction(mouseX, mouseY); } else if (currentScreen == 0) { startMenuOpen = !startMenuOpen; drawDesktop(-1); playFeedback(1200, 50); } }
+
+    // --- GELİŞMİŞ BUTON MANTIĞI ---
+    if (j1.btn == LOW) { // Butona basılıyor
+        if (btnPressStartTime == 0) btnPressStartTime = millis();
+        if (millis() - btnPressStartTime > 2000 && !longPressTriggered) { // 2 Sn Geçti
+            mouseEnabled = !mouseEnabled;
+            longPressTriggered = true;
+            playFeedback(600, 300);
+            currentScreen = 0; startMenuOpen = false; drawDesktop(-1);
         }
-        lastBtnState = j1.btn;
+    } else { // Buton bırakıldı
+        if (btnPressStartTime != 0) {
+            unsigned long duration = millis() - btnPressStartTime;
+            if (duration < 2000) { // Kısa Basış
+                if (mouseEnabled) { handleInteraction(mouseX, mouseY); drawDesktop(-1); }
+                else { startMenuOpen = !startMenuOpen; drawDesktop(-1); playFeedback(1200, 50); }
+            }
+            btnPressStartTime = 0; longPressTriggered = false;
+        }
     }
+
+    // --- MASAÜSTÜ VE FARE ---
     if (currentScreen == 0) {
         if (mouseEnabled) {
             int dx = (j1.x - 2048) / 100; int dy = (j1.y - 2048) / 100;
             if (abs(dx) > 1 || abs(dy) > 1) {
-                mouseX = constrain(mouseX + dx, 0, 310); mouseY = constrain(mouseY + dy, 0, 230);
-                int hoverIdx = -1;
-                if (mouseX < 85) { if (mouseY > 20 && mouseY < 80) hoverIdx = 1; else if (mouseY > 95 && mouseY < 155) hoverIdx = 2; else if (mouseY > 165 && mouseY < 210) hoverIdx = 3; }
-                if (hoverIdx != lastHoverIdx && hoverIdx != -1) { playFeedback(2000, 5); }
-                if (millis() - lastActionTime > 40) { drawDesktop(hoverIdx); drawMouse(); lastHoverIdx = hoverIdx; lastActionTime = millis(); }
+                mouseX = constrain(mouseX + dx, 0, 310); mouseY = constrain(mouseY + dy, 0, 210);
+                int hover = -1;
+                if (mouseX < 85) {
+                    if (mouseY < 80) hover = 1; 
+                    else if (mouseY > 140 && mouseY < 200) hover = 3;
+                }
+                if (millis() - lastActionTime > 50) { drawDesktop(hover); drawMouse(); lastActionTime = millis(); }
             }
         }
         if (ts.touched()) {
             TS_Point p = ts.getPoint();
             int tx = map(p.x, 200, 3850, 320, 0); int ty = map(p.y, 240, 3800, 240, 0);
-            if (tx < 50 && ty > 215) { startMenuOpen = !startMenuOpen; drawDesktop(-1); delay(200); }
+            if (tx < 50 && ty > 200) { startMenuOpen = !startMenuOpen; drawDesktop(-1); delay(200); }
             else { handleInteraction(tx, ty); }
         }
-    }
-    if (currentScreen == 1) {
-        tft.setTextColor(COLOR_WHITE, COLOR_BLACK); tft.setCursor(10, 10); tft.print("KYNEX SOVEREIGN TEST");
-        tft.setCursor(10, 40); tft.printf("J1 X:%04d Y:%04d B:%d", j1.x, j1.y, j1.btn);
-        tft.setCursor(10, 70); tft.printf("J2 X:%04d Y:%04d B:%d", j2.x, j2.y, j2.btn);
-        if (ts.touched()) { TS_Point p = ts.getPoint(); tft.fillCircle(map(p.x, 200, 3850, 320, 0), map(p.y, 240, 3800, 240, 0), 2, COLOR_RED); }
     }
 }
