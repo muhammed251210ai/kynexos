@@ -1,6 +1,10 @@
-name: KynexOs Sovereign Build v123.2
+name: KynexOs Sovereign Build v139.1
 
 on: [push]
+
+env:
+  # MUHAMMED: GitHub'ın istediği kritik Node.js 24 geçiş anahtarı buraya eklendi.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   build:
@@ -15,7 +19,7 @@ jobs:
           path: |
             ~/.cache/pip
             ~/.platformio
-          key: ${{ runner.os }}-platformio-v123-2
+          key: ${{ runner.os }}-platformio-v139-1
 
       - name: Python Kur
         uses: actions/setup-python@v5
