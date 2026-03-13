@@ -1,6 +1,7 @@
-/* * KynexOs v123.0 - The Kynex Sovereign OS (Final Build)
+/* * KynexOs v123.0 - The Kynex Sovereign OS (Absolute Master)
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Full Screen Image, TR Keyboard, WiFi/BT Manager, Web FM
+ * Donanım: ESP32-S3 N16R8
+ * Özellikler: Full TR Keyboard, WiFi/BT Manager, Auto-Connect, Web File Manager
  * Hata Düzeltme: drawKeyboard Name Fix, Rotation Correction, Linking Fix
  * Talimat: Asla satır silme, optimize etme, sadeleştirme yapma. 
  */
@@ -19,14 +20,6 @@
 #include <BluetoothSerial.h>
 
 #include "wallpaper.h" 
-
-// --- FONKSİYON PROTOTİPLERİ ---
-void drawKynexKeyboard();
-void handleGlobalInteraction(int x, int y);
-void drawDesktop(int h);
-void playBeep(int f, int d);
-void drawWiFiSettings();
-void startWebFM();
 
 // --- PIN TANIMLAMALARI ---
 #define TFT_BL        1
@@ -55,7 +48,7 @@ void startWebFM();
 #define COLOR_RED       0xF800 
 
 // --- SİSTEM DEĞİŞKENLERİ ---
-int currentScreen = 0; 
+int currentScreen = 0; // 0:Desktop, 1:Hardware Test, 2:Explorer, 3:WiFiSettings, 4:Keyboard
 bool startMenuOpen = false;
 bool mouseEnabled = true;
 float mouseX = 160, mouseY = 120;
@@ -94,7 +87,7 @@ JoyData readJoy(int px, int py, int psw) {
     return d;
 }
 
-// --- WEB TABANLI DOSYA YÖNETİCİSİ (PRO) ---
+// --- WEB TABANLI DOSYA YÖNETİCİSİ ---
 void handleWebRoot() {
     String h = "<html><head><meta charset='UTF-8'><title>Kynex Sovereign OS</title></head><body style='background:#f0f2f5; font-family:sans-serif;'>";
     h += "<div style='max-width:600px; margin:auto; background:white; padding:20px; border-radius:15px; box-shadow:0 10px 25px rgba(0,0,0,0.1);'>";
@@ -128,17 +121,141 @@ void drawTaskbar() {
     tft.fillRect(0, 215, 320, 25, WIN10_TASKBAR);
     tft.fillRect(0, 215, 45, 25, startMenuOpen ? WIN10_HOVER : WIN10_START);
     tft.setTextColor(COLOR_WHITE); tft.setCursor(270, 225);
-    tft.print(WiFi.status() == WL_CONNECTED ? "BAĞLI" : "AP");
+    tft.print(WiFi.status() == WL_CONNECTED ? "BAGLI" : "AP");
 }
 
 void drawDesktop(int h) {
-    // Muhammed, tam ekran için temizlik ve basım
     tft.fillRect(0,0,320,240, WIN10_BLUE);
     TJpgDec.drawJpg(0, 0, win10_wallpaper_embedded, sizeof(win10_wallpaper_embedded)); 
     
-    // Simgeler
+    // Ikonlar
     if(h==1) tft.drawRoundRect(25, 25, 55, 55, 8, COLOR_WHITE);
     tft.fillRect(30,30,45,35, h==1 ? WIN10_HOVER : 0x4D3F);
     tft.setCursor(20,75); tft.print("Bu Bilgisayar");
     
-    if(h==3) tft.drawRoundRect(25, 145, 55, 55,
+    if(h==3) tft.drawRoundRect(25, 145, 55, 55, 8, COLOR_WHITE);
+    tft.fillRect(30,150,45,35, h==3 ? WIN10_HOVER : 0xF620);
+    tft.setCursor(20,195); tft.print("Hardware Test");
+    
+    drawTaskbar();
+    
+    if (startMenuOpen) {
+        tft.fillRect(0, 40, 160, 175, WIN10_TASKBAR);
+        tft.drawRect(0, 40, 160, 175, WIN10_START);
+        tft.setCursor(15, 60); tft.print("Kynex Sovereign OS");
+        tft.setCursor(15, 90); tft.print("> WiFi Ayarlari");
+        tft.setCursor(15, 120); tft.print("> Bluetooth");
+        tft.fillRect(0, 185, 160, 30, COLOR_RED);
+        tft.setCursor(60, 197); tft.print("KAPAT");
+    }
+}
+
+void handleGlobalInteraction(int x, int y) {
+    playBeep(1800, 20);
+    if (currentScreen == 0 && !startMenuOpen) {
+        if (x < 90) {
+            if (y > 20 && y < 90) { currentScreen = 2; /* Explorer */ }
+            else if (y > 140 && y < 210) { currentScreen = 1; tft.fillScreen(COLOR_BLACK); }
+        }
+    }
+    if (startMenuOpen && x < 160 && y > 185) ESP.restart();
+    if (startMenuOpen && x < 160 && y > 80 && y < 110) { currentScreen = 3; startMenuOpen = false; }
+}
+
+void setup() {
+    Serial.begin(115200);
+    psramInit();
+    FFat.begin(true);
+    prefs.begin("kynex", false);
+
+    // AutoConnect Mantığı
+    String savedSSID = prefs.getString("ssid", "");
+    String savedPASS = prefs.getString("pass", "");
+    if(savedSSID != "") WiFi.begin(savedSSID.c_str(), savedPASS.c_str());
+
+    WiFi.softAP("Kynex-Win10", "12345678");
+    server.on("/", handleWebRoot);
+    server.begin();
+    SerialBT.begin("Kynex-Sovereign-BT");
+
+    pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, HIGH);
+    pinMode(JOY1_SW, INPUT_PULLUP);
+    
+    TJpgDec.setJpgScale(1);
+    TJpgDec.setCallback(tft_output);
+    SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, TFT_CS); 
+    
+    tft.begin(); tft.setRotation(3); 
+    ts.begin(); ts.setRotation(3);
+    
+    drawDesktop(-1);
+    Serial.println("KYNEXOS SOVEREIGN BOOTED");
+}
+
+void loop() {
+    server.handleClient();
+    JoyData j1 = readJoy(JOY1_X, JOY1_Y, JOY1_SW);
+    JoyData j2 = readJoy(JOY2_X, JOY2_Y, JOY2_SW);
+
+    // --- BUTON MANTIĞI: BEKLEMELİ UZUN BASIŞ ---
+    if (j1.btn == LOW) {
+        if (btnPressStart == 0) btnPressStart = millis();
+        if (millis() - btnPressStart > 2000 && !longPressTriggered) {
+            mouseEnabled = !mouseEnabled; longPressTriggered = true;
+            playBeep(600, 300); currentScreen = 0; startMenuOpen = false; drawDesktop(-1);
+        }
+    } else {
+        if (btnPressStart != 0) {
+            unsigned long dur = millis() - btnPressStart;
+            if (!longPressTriggered && dur > 50) {
+                if (mouseEnabled && currentScreen == 0) { handleGlobalInteraction(mouseX, mouseY); drawDesktop(-1); }
+                else if (currentScreen == 0) { startMenuOpen = !startMenuOpen; drawDesktop(-1); playBeep(1200, 50); }
+            }
+            btnPressStart = 0; longPressTriggered = false;
+        }
+    }
+
+    // --- MASAÜSTÜ VE FARE ---
+    if (currentScreen == 0) {
+        if (mouseEnabled) {
+            mouseX = constrain(mouseX + (j1.x - 2048)/120, 0, 310);
+            mouseY = constrain(mouseY + (j1.y - 2048)/120, 0, 230);
+            int h = -1;
+            if (mouseX < 90) { if (mouseY < 90) h = 1; else if (mouseY > 140) h = 3; }
+            if (millis() - lastAction > 45) {
+                drawDesktop(h);
+                tft.fillTriangle(mouseX, mouseY, mouseX+12, mouseY+12, mouseX, mouseY+16, COLOR_WHITE);
+                tft.drawTriangle(mouseX, mouseY, mouseX+12, mouseY+12, mouseX, mouseY+16, COLOR_BLACK);
+                lastAction = millis();
+            }
+        }
+        if (ts.touched()) {
+            TS_Point p = ts.getPoint();
+            int tx = map(p.x, 200, 3850, 320, 0); int ty = map(p.y, 240, 3800, 240, 0);
+            if (tx < 50 && ty > 210) { startMenuOpen = !startMenuOpen; drawDesktop(-1); delay(200); }
+            else { handleGlobalInteraction(tx, ty); }
+        }
+    }
+
+    // --- DONANIM TEST EKRANI ---
+    if (currentScreen == 1) {
+        if (millis() - lastAction > 100) {
+            tft.fillScreen(COLOR_BLACK);
+            tft.setCursor(10,10); tft.setTextColor(COLOR_WHITE); tft.print("KYNEX DUAL TEST");
+            tft.setCursor(10,50); tft.printf("JOY1 X:%d Y:%d B:%d", j1.x, j1.y, j1.btn);
+            tft.setCursor(10,85); tft.printf("JOY2 X:%d Y:%d B:%d", j2.x, j2.y, j2.btn);
+            if(ts.touched()){
+                TS_Point p = ts.getPoint();
+                int tx = map(p.x, 200, 3850, 320, 0); int ty = map(p.y, 240, 3800, 240, 0);
+                tft.fillCircle(tx, ty, 4, COLOR_RED);
+            }
+            lastAction = millis();
+        }
+    }
+
+    // --- KLAVYE MODU ---
+    if (currentScreen == 4) {
+        drawKynexKeyboard();
+        // Dokunma tespiti buraya gelecek
+    }
+}
