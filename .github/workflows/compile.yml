@@ -15,7 +15,7 @@ jobs:
           path: |
             ~/.cache/pip
             ~/.platformio
-          key: ${{ runner.os }}-platformio-permanent-v3
+          key: ${{ runner.os }}-platformio-permanent-v4
 
       - name: Python Kur
         uses: actions/setup-python@v5
@@ -31,5 +31,6 @@ jobs:
       - name: Bin Dosyasini Paylas
         uses: actions/upload-artifact@v4
         with:
-          name: KynexOs_Absolute_v122
+          name: KynexOs_Firmware_Bin_Inside
           path: .pio/build/esp32-s3-devkitc-1/firmware.bin
+          compression-level: 0 # Zip icindeki dosyayi sıkıştırmaz, daha hızlı cıkar
