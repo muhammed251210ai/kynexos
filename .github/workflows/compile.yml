@@ -1,4 +1,4 @@
-name: KynexOs Turbo Build
+name: KynexOs Sovereign Build
 
 on: [push]
 
@@ -9,29 +9,27 @@ jobs:
       - name: Kodu Cek
         uses: actions/checkout@v4
 
-      - name: PlatformIO Onbellegini Yukle
+      - name: PlatformIO Onbellegini Kur
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/pip
             ~/.platformio
-          key: ${{ runner.os }}-pio
+          key: ${{ runner.os }}-platformio-permanent-v3
 
       - name: Python Kur
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: PlatformIO Kur
+      - name: PlatformIO Yukle ve Derle
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade platformio
-
-      - name: KynexOs Derle
-        run: pio run
+          pio run
 
       - name: Bin Dosyasini Paylas
         uses: actions/upload-artifact@v4
         with:
-          name: KynexOs_Firmware
+          name: KynexOs_Absolute_v122
           path: .pio/build/esp32-s3-devkitc-1/firmware.bin
