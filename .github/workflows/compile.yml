@@ -1,9 +1,10 @@
-name: KynexOs Sovereign Build v139.1
+name: KynexOs Sovereign Build v141.0
 
 on: [push]
 
 env:
   # MUHAMMED: GitHub'ın istediği kritik Node.js 24 geçiş anahtarı buraya eklendi.
+  # Bu satır, kullandığın tüm eylemleri Node 24 motoruyla çalışmaya zorlar.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
@@ -19,7 +20,7 @@ jobs:
           path: |
             ~/.cache/pip
             ~/.platformio
-          key: ${{ runner.os }}-platformio-v139-1
+          key: ${{ runner.os }}-platformio-v141-node24
 
       - name: Python Kur
         uses: actions/setup-python@v5
@@ -35,6 +36,6 @@ jobs:
       - name: Bin Dosyasini Paylas
         uses: actions/upload-artifact@v4
         with:
-          name: KynexOs_Firmware_Absolute
+          name: KynexOs_Firmware_Immortal
           path: .pio/build/esp32-s3-devkitc-1/firmware.bin
           compression-level: 0
