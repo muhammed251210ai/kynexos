@@ -1,8 +1,8 @@
-/* * KynexOs v145.0 - The Silence (LEDC Hardware Override Fix)
+/* * KynexOs v146.0 - The Ultimate Cure (GPT-Assisted LEDC Panic Fix)
  * Geliştirici: Muhammed (Kynex)
  * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
  * Özellikler: Dual-Boot RetroGo, Custom Bit-Bang Audio, SPI DMA Fix, WiFi Master, Games
- * Hata Düzeltme: LEDC is not initialized (PC:0x00) Panic Override, Boot Loop Bypass
+ * Hata Düzeltme: LEDC 0Hz Panic Completely Removed, Bit-Bang Audio Restored, Boot Loop Fixed
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -134,7 +134,8 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) 
     return true;
 }
 
-// MUHAMMED: KERNEL PANIC COZUMU (BIT-BANG)
+// MUHAMMED: %100 GUVENLI BIT-BANG SES MOTORU
+// Hicbir LEDC kanalini kullanmadan tamamen manuel sinyal uretir.
 void playBeep(int f, int d) { 
     if (f <= 0 || d <= 0) return;
     long halfPeriod = 1000000L / f / 2;
@@ -201,6 +202,7 @@ void drawTaskbar() {
 void drawDesktop(int hIdx) {
     tft.fillRect(0, 0, 320, 240, COLOR_BLACK); 
     
+    // GIZLI HATA COZUMU: Null Pointer ve Bellek Adresi Kontrolu
     if (wallpaper_jpg_start != nullptr && (uintptr_t)wallpaper_jpg_start > 0x1000) {
         size_t wlen = (size_t)(wallpaper_jpg_end - wallpaper_jpg_start);
         if (wlen > 100) { 
@@ -244,7 +246,7 @@ void drawAboutScreen() {
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Sistem Bilgileri");
     tft.setTextColor(COLOR_BLACK);
     tft.setCursor(10, 60); tft.print("Cihaz: Kynex Sovereign S3");
-    tft.setCursor(10, 80); tft.print("Surum: v145.0 The Silence");
+    tft.setCursor(10, 80); tft.print("Surum: v146.0 Ultimate");
     tft.setCursor(10, 110); tft.print("WiFi Ag: "); tft.print(WiFi.SSID());
     tft.setCursor(10, 140); tft.setTextColor(COLOR_BLUE);
     tft.print("IP: http://"); tft.print(WiFi.localIP().toString());
@@ -362,24 +364,19 @@ void handleGlobalClick(int x, int y) {
 }
 
 void setup() {
-    // 1. EKRAN VE SES PINLERI: LEDC SUSTURUCU DEVREDE
+    // 1. EKRAN VE SES PINLERI (HİÇBİR LEDC KOMUTU YOK!)
     pinMode(SPEAKER_PIN, OUTPUT);
-    digitalWrite(SPEAKER_PIN, LOW); // Hoparloru zorla kapat
+    digitalWrite(SPEAKER_PIN, LOW); // Ses kesinlikle kapali baslar
     pinMode(TFT_BL, OUTPUT);
-    digitalWrite(TFT_BL, HIGH); // Ekran aydinlatmasini tam guc ac
+    digitalWrite(TFT_BL, HIGH); // Ekran parlakligi 100% kilitlendi
     
-    // GIZLI HATA: Arka planda çalısan seste LEDC kanalini 0 frekansla baslatip kör ediyoruz.
-    ledcSetup(0, 0, 8); 
-    ledcAttachPin(SPEAKER_PIN, 0);
-    ledcWrite(0, 0); // Asla ses cikarmayacak sekilde kilitle
-
     Serial.begin(115200); 
     psramInit(); FFat.begin(true); prefs.begin("kynex", false);
     
-    // 2. SPI DONANIM CAKISMASI COZULDU (TFT_CS pin -1 yapilarak serbest birakildi)
+    // 2. SPI DONANIM CAKISMASI COZULDU
     SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, -1); 
     tft.begin(); 
-    tft.setRotation(1); // MUHAMMED: Duzelmesi icin tekrar 1'e alindi
+    tft.setRotation(1); 
     ts.begin(SPI); 
     ts.setRotation(1);
     
