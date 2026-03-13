@@ -1,0 +1,29 @@
+name: KynexOs Cloud Build
+
+on: [push] # Sen her kod yüklediğinde otomatik başlar
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodu Cek
+        uses: actions/checkout@v3
+
+      - name: Python Kur
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: PlatformIO Kur
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade platformio
+
+      - name: KynexOs Derle (Turbo)
+        run: pio run
+
+      - name: Bin Dosyasini Paylas
+        uses: actions/upload-artifact@v3
+        with:
+          name: KynexOs_Firmware
+          path: .pio/build/esp32-s3-devkitc-1/firmware.bin
