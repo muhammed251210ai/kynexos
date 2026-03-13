@@ -1,7 +1,7 @@
 # Name,   Type, SubType, Offset,  Size, Flags
-nvs,      data, nvs,     ,        0x4000,
-otadata,  data, ota,     ,        0x2000,
-phy_init, data, phy,     ,        0x1000,
-factory,  app,  factory, ,        6M,
-ota_0,    app,  ota_0,   ,        8M,
-ffat,     data, fat,     ,        1M,
+nvs,      data, nvs,     0x9000,  0x5000,
+otadata,  data, ota,     0xe000,  0x2000,
+phy_init, data, phy,     0x10000, 0x1000,
+factory,  app,  factory, 0x20000, 0x400000,
+ota_0,    app,  ota_0,   0x420000,0x900000,
+ffat,     data, fat,     0xd20000,0x200000,
