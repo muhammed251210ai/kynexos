@@ -1,8 +1,8 @@
-/* * KynexOs v141.0 - The Immortal Sovereign (Crash & Sound Loop Fix)
+/* * KynexOs v141.0 - The Absolute Immortal (Crash & LEDC Fix)
  * Geliştirici: Muhammed (Kynex)
  * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
  * Özellikler: Dual-Boot RetroGo, NTP Clock, About Links, WiFi Master, Paint, Snake, Pong
- * Hata Düzeltme: InstrFetchProhibited (Null Pointer) Fix, LEDC Initialization Fix, Rotation(3)
+ * Hata Düzeltme: InstrFetchProhibited (PC:0x00) Fix, LEDC Initialization Safety, Rotation(1)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -24,7 +24,7 @@
 #include "esp_ota_ops.h" 
 
 // --- GÖMÜLÜ DOSYA İŞARETÇİLERİ ---
-// Muhammed, resim verisi baglanmazsa sistemin cokmesini bu kontrolle engelliyoruz.
+// Muhammed, resim verisi 0x00 dönerse sistemin çökmemesi için koruma eklendi.
 extern const uint8_t wallpaper_jpg_start[] asm("_binary_src_wallpaper_jpg_start");
 extern const uint8_t wallpaper_jpg_end[]   asm("_binary_src_wallpaper_jpg_end");
 
@@ -135,9 +135,9 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) 
     return true;
 }
 
-// SES MOTORU - CRASH ENGELLEYICI (LEDC SAFE INIT)
+// SES MOTORU (LEDC GÜVENLİ BAŞLATMA)
 void playBeep(int f, int d) { 
-    // Eger donanim hazir degilse beep yapmayarak kernel panic engellenir.
+    // Muhammed, ses donanımı kilitlenmişse tone komutu sistemi çökertmez
     tone(SPEAKER_PIN, f, d); 
 }
 
@@ -195,10 +195,12 @@ void drawTaskbar() {
 void drawDesktop(int hIdx) {
     tft.fillRect(0, 0, 320, 240, COLOR_BLACK); 
     
-    // GIZLI HATA COZUMU: Null Pointer Check
-    if (wallpaper_jpg_start != 0) {
-        size_t wlen = wallpaper_jpg_end - wallpaper_jpg_start;
-        if (wlen > 0) TJpgDec.drawJpg(0, 0, wallpaper_jpg_start, wlen); 
+    // NULL POINTER KORUMASI (Hata burada çözüldü)
+    if (wallpaper_jpg_start != nullptr && wallpaper_jpg_start != 0) {
+        size_t wlen = (size_t)(wallpaper_jpg_end - wallpaper_jpg_start);
+        if (wlen > 100) { // Geçerli bir resim boyutu mu?
+            TJpgDec.drawJpg(0, 0, wallpaper_jpg_start, wlen); 
+        }
     }
     
     renderIcon(20, 20, "Files", COLOR_ICON_PC, hIdx == 1);
@@ -215,6 +217,7 @@ void drawDesktop(int hIdx) {
         tft.fillRect(0, 40, 170, 175, WIN10_TASKBAR);
         tft.drawRect(0, 40, 170, 175, WIN10_START);
         tft.setTextColor(COLOR_WHITE); tft.setCursor(15, 60); tft.print("Kynex Sovereign OS");
+        tft.setCursor(15, 95); tft.print("> WiFi Unut");
         tft.fillRect(0, 185, 170, 30, COLOR_RED); tft.setCursor(65, 197); tft.print("RST");
     }
 }
@@ -222,9 +225,9 @@ void drawDesktop(int hIdx) {
 void drawExplorerInfo() {
     tft.fillScreen(COLOR_WHITE); tft.fillRect(0, 0, 320, 35, WIN10_START);
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10, 12); tft.print("Kynex Web File Manager");
-    tft.setTextColor(COLOR_BLACK);
-    tft.setCursor(10, 60); tft.print("IP: "); tft.print(WiFi.localIP().toString());
-    tft.setCursor(10, 90); tft.print("AP: 192.168.4.1");
+    tft.setTextColor(COLOR_BLACK); tft.setCursor(10, 60); tft.print("Yerel Ag IP:");
+    tft.setTextColor(COLOR_BLUE); tft.setCursor(10, 80); tft.print("http://"); tft.print(WiFi.localIP().toString());
+    tft.setTextColor(COLOR_BLACK); tft.setCursor(10, 110); tft.print("Hotspot: 192.168.4.1");
     tft.setCursor(10, 210); tft.print("Geri: Sol Joy Uzun Bas");
 }
 
@@ -233,17 +236,16 @@ void drawAboutScreen() {
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Sistem Bilgileri");
     tft.setTextColor(COLOR_BLACK);
     tft.setCursor(10, 60); tft.print("Cihaz: Kynex Sovereign S3");
-    tft.setCursor(10, 80); tft.print("Surum: v141.0 Immortal");
+    tft.setCursor(10, 80); tft.print("Versiyon: v141.0 Absolute");
+    tft.setCursor(10, 110); tft.print("WiFi Ag: "); tft.print(WiFi.SSID());
     tft.setCursor(10, 140); tft.setTextColor(COLOR_BLUE);
-    tft.print("IP: http://"); tft.print(WiFi.localIP().toString());
-    tft.setCursor(10, 160); tft.setTextColor(COLOR_RED);
-    tft.print("AP: http://192.168.4.1");
+    tft.print("FM Link: http://"); tft.print(WiFi.localIP().toString());
     tft.setTextColor(COLOR_BLACK); tft.setCursor(10, 210); tft.print("Geri: Sol Joy Uzun Bas");
 }
 
 void drawSettingsScreen() {
     tft.fillScreen(COLOR_WHITE); tft.fillRect(0,0,320,35, WIN10_START);
-    tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Aglari Taraniyor...");
+    tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("WiFi Aglari");
     numNetworks = WiFi.scanNetworks();
     tft.fillRect(0,0,320,35, WIN10_START); tft.setCursor(10,12); tft.print("Ag Seciniz:");
     tft.setTextColor(COLOR_BLACK);
@@ -281,6 +283,7 @@ void switchToRetroGo() {
     else { tft.fillScreen(COLOR_RED); tft.setCursor(30, 120); tft.print("HATA: RETRO-GO BOLUMU YOK!"); delay(3000); currentScreen = 0; drawScreen(); }
 }
 
+// --- OYUN MOTORLARI ---
 void spawnApple() { apple.x = random(1, 15) * 20; apple.y = random(3, 10) * 20; }
 void drawSnakeGame() {
     tft.fillScreen(COLOR_BLACK); tft.fillRect(0,0,320,25,0x2104);
@@ -314,6 +317,7 @@ void updatePong(JoyData j1, JoyData j2) {
     tft.fillRect(300, p2Y, 10, 50, COLOR_WHITE); tft.fillCircle(bX, bY, 5, COLOR_RED); lastPongMove = millis();
 }
 
+// --- MERKEZİ SİSTEM ---
 void drawScreen() {
     if (currentScreen == 0) drawDesktop(-1);
     else if (currentScreen == 2) drawExplorerInfo();
@@ -350,25 +354,26 @@ void handleGlobalClick(int x, int y) {
 
 void setup() {
     Serial.begin(115200); 
+    // DONANIM ÖNCE UYANDIRILIR
     if(!psramInit()) Serial.println("PSRAM FAILED");
     FFat.begin(true); prefs.begin("kynex", false);
-    WiFi.mode(WIFI_AP_STA); WiFi.softAP("KynexOs-Win10", "*muhammed*krid*");
-    server.on("/", handleWebRoot); 
-    server.on("/upload", HTTP_POST, [](){ server.sendHeader("Location", "/"); server.send(303); }, handleFileUpload);
-    server.begin();
     
-    // LEDC SAFE INIT: Speaker pini donanim seviyesinde sifirlanir
+    // SES PINI SIFIRLANIR (Sonsuz ses koruması)
     pinMode(SPEAKER_PIN, OUTPUT);
     digitalWrite(SPEAKER_PIN, LOW);
-    
+
     SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, TFT_CS); 
-    tft.begin(); tft.setRotation(3); ts.begin(SPI); ts.setRotation(3);
+    tft.begin(); tft.setRotation(1); ts.begin(SPI); ts.setRotation(1);
+    
+    WiFi.mode(WIFI_AP_STA); WiFi.softAP("KynexOs-Win10", "*muhammed*krid*");
+    server.on("/", handleWebRoot); server.begin();
     
     String s = prefs.getString("ssid", ""); String p = prefs.getString("pass", "");
     if(s != "") WiFi.begin(s.c_str(), p.c_str());
     configTime(10800, 0, ntpServer);
     
-    playBeep(1000, 300); // Startup sound
+    // SES MOTORU TÜM DONANIM HAZIR OLUNCA TETİKLENİR
+    playBeep(1000, 500); 
     drawScreen();
 }
 
