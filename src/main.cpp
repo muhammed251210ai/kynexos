@@ -1,8 +1,8 @@
-/* * KynexOs v146.0 - The Ultimate Cure (GPT-Assisted LEDC Panic Fix)
+/* * KynexOs v147.0 - The Final Sentinel (Firmware Hash Update & Clean Flash)
  * Geliştirici: Muhammed (Kynex)
  * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
  * Özellikler: Dual-Boot RetroGo, Custom Bit-Bang Audio, SPI DMA Fix, WiFi Master, Games
- * Hata Düzeltme: LEDC 0Hz Panic Completely Removed, Bit-Bang Audio Restored, Boot Loop Fixed
+ * Hata Düzeltme: 100% LEDC/Tone Removal, Version Bump for SHA256 Verification
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -134,8 +134,7 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) 
     return true;
 }
 
-// MUHAMMED: %100 GUVENLI BIT-BANG SES MOTORU
-// Hicbir LEDC kanalini kullanmadan tamamen manuel sinyal uretir.
+// MUHAMMED: %100 GUVENLI BIT-BANG SES MOTORU (LEDC ASLA YOK)
 void playBeep(int f, int d) { 
     if (f <= 0 || d <= 0) return;
     long halfPeriod = 1000000L / f / 2;
@@ -202,7 +201,7 @@ void drawTaskbar() {
 void drawDesktop(int hIdx) {
     tft.fillRect(0, 0, 320, 240, COLOR_BLACK); 
     
-    // GIZLI HATA COZUMU: Null Pointer ve Bellek Adresi Kontrolu
+    // Güvenli Resim Yükleme (Çökme Koruması)
     if (wallpaper_jpg_start != nullptr && (uintptr_t)wallpaper_jpg_start > 0x1000) {
         size_t wlen = (size_t)(wallpaper_jpg_end - wallpaper_jpg_start);
         if (wlen > 100) { 
@@ -246,7 +245,8 @@ void drawAboutScreen() {
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Sistem Bilgileri");
     tft.setTextColor(COLOR_BLACK);
     tft.setCursor(10, 60); tft.print("Cihaz: Kynex Sovereign S3");
-    tft.setCursor(10, 80); tft.print("Surum: v146.0 Ultimate");
+    // MUHAMMED: Bu yazıyı görüyorsan flaşlama BAŞARILIDIR!
+    tft.setCursor(10, 80); tft.print("Surum: v147.0 The Final Sentinel");
     tft.setCursor(10, 110); tft.print("WiFi Ag: "); tft.print(WiFi.SSID());
     tft.setCursor(10, 140); tft.setTextColor(COLOR_BLUE);
     tft.print("IP: http://"); tft.print(WiFi.localIP().toString());
@@ -364,16 +364,15 @@ void handleGlobalClick(int x, int y) {
 }
 
 void setup() {
-    // 1. EKRAN VE SES PINLERI (HİÇBİR LEDC KOMUTU YOK!)
+    // SES DONANIMI ASLA KULLANILMIYOR (Bit-bang aktif)
     pinMode(SPEAKER_PIN, OUTPUT);
-    digitalWrite(SPEAKER_PIN, LOW); // Ses kesinlikle kapali baslar
+    digitalWrite(SPEAKER_PIN, LOW); 
     pinMode(TFT_BL, OUTPUT);
-    digitalWrite(TFT_BL, HIGH); // Ekran parlakligi 100% kilitlendi
+    digitalWrite(TFT_BL, HIGH); 
     
     Serial.begin(115200); 
     psramInit(); FFat.begin(true); prefs.begin("kynex", false);
     
-    // 2. SPI DONANIM CAKISMASI COZULDU
     SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, -1); 
     tft.begin(); 
     tft.setRotation(1); 
