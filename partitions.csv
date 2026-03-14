@@ -2,9 +2,6 @@
 # * Kynex Sovereign - KynexOs Mainframe Partition Table (N16R8 - 16MB)
 # * Geliştirici: Muhammed (Kynex)
 # * Donanım: ESP32-S3 N16R8 (16MB Flash)
-# * Sistem 1 (Factory): KynexOs / Retro-Go Core @ 0x10000
-# * Sistem 2 (OTA_0): Secondary OS / Yedek Sistem @ 0x410000
-# * Storage (FFat): Data Klasörü (Cores & Roms) @ 0x810000 (Yaklaşık 8MB)
 # * Talimat: Asla satır silmeden, tam ve tek parça kod.
 # **************************************************************************
 # Name,   Type, SubType, Offset,   Size,     Flags
