@@ -1,6 +1,15 @@
-# Name,   Type, SubType, Offset,  Size, Flags
-nvs,      data, nvs,     0x9000,  0x5000,
-otadata,  data, ota,     0xe000,  0x2000,
-factory,  app,  factory, 0x10000, 0x400000,
-ota_0,    app,  ota_0,   0x410000,0x800000,
-ffat,     data, fat,     0xC10000,0x3F0000,
+# **************************************************************************
+# * KynexOs v178.0 - Partition Table (16MB Flash Map)
+# * Geliştirici: Muhammed (Kynex)
+# * Donanım: ESP32-S3 N16R8 (16MB Flash)
+# * Factory (Retro-Go): 4MB (0x10000)
+# * OTA_0 (KynexOs): 8MB (0x410000)
+# * FFat (Storage): 3.9MB (0xC10000)
+# * Talimat: Asla satır silmeden, tam ve tek parça kod.
+# **************************************************************************
+# Name,   Type, SubType, Offset,   Size,     Flags
+nvs,      data, nvs,     0x9000,   0x5000,
+otadata,  data, ota,     0xe000,   0x2000,
+factory,  app,  factory, 0x10000,  0x400000,
+ota_0,    app,  ota_0,   0x410000, 0x800000,
+ffat,     data, fat,     0xC10000, 0x3F0000,
