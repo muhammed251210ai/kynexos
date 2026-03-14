@@ -379,12 +379,15 @@ void handleGlobalClick(int x, int y) {
 }
 
 void setup() {
-    // MUHAMMED: Kilitlendi
     pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, HIGH); 
     pinMode(SPEAKER_PIN, OUTPUT); digitalWrite(SPEAKER_PIN, LOW); 
     
     Serial.begin(115200); 
-    psramInit(); FFat.begin(true); prefs.begin("kynex", false);
+    
+    // MUHAMMED: PSRAM GERİ DÖNDÜ! (v160.0 ile QIO_OPI modunda sorunsuz çalışacak)
+    psramInit(); 
+    
+    FFat.begin(true); prefs.begin("kynex", false);
     
     SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, -1); 
     tft.begin(); tft.setRotation(1); ts.begin(SPI); ts.setRotation(1);
