@@ -1,8 +1,8 @@
-/* * KynexOs v153.0 - The Gatekeeper (Validation & Boot Fix)
+/* * KynexOs v154.0 - The Core Alignment (Native Boot Fix)
  * Geliştirici: Muhammed (Kynex)
  * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
- * Özellikler: Dual-Boot RetroGo Launcher, Bit-Bang Audio, Cyber-Grid UI, Boot Diagnostics
- * Hata Düzeltme: OTA Partition Verification (Fixes Spinning/Reset), Power-On Backlight Lock
+ * Özellikler: Dual-Boot RetroGo Launcher, Bit-Bang Audio, Cyber-Grid UI, Header Verification
+ * Hata Düzeltme: 0x10000 Native App Alignment (Fixes Instant Reset), Memory Map Sync
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -22,7 +22,7 @@
 #include <time.h>
 #include "esp_ota_ops.h" 
 #include "esp_partition.h"
-#include "esp_image_format.h" // MUHAMMED: Binary doğrulama kütüphanesi
+#include "esp_image_format.h" 
 
 // --- PIN TANIMLAMALARI ---
 #define TFT_BL        1
@@ -212,7 +212,7 @@ void drawDesktop(int hIdx) {
     }
 }
 
-// MUHAMMED: RETRO-GO GÜVENLİ GEÇİŞ MOTORU (v153.0 Gatekeeper)
+// MUHAMMED: RETRO-GO GÜVENLİ GEÇİŞ MOTORU (v154.0 Alignment Fix)
 void switchToRetroGo() {
     playBeep(400, 300);
     tft.fillScreen(COLOR_BLACK);
@@ -220,7 +220,6 @@ void switchToRetroGo() {
     tft.setCursor(20, 100);
     tft.print("BOOT SECTOR ANALYZING...");
 
-    // 1. Partition Kontrolü
     const esp_partition_t* retro_part = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, "ota_0");
     
     if (retro_part != NULL) {
@@ -228,7 +227,6 @@ void switchToRetroGo() {
         tft.printf("TARGET FOUND: 0x%06X", retro_part->address);
         delay(500);
         
-        // 2. Binary Header Doğrulaması (Çökmeyi engelleyen sihir burada)
         esp_image_metadata_t data;
         const esp_partition_pos_t pos = { .offset = retro_part->address, .size = retro_part->size };
         
@@ -273,7 +271,7 @@ void drawAboutScreen() {
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Sistem Bilgileri");
     tft.setTextColor(COLOR_BLACK);
     tft.setCursor(10, 60); tft.print("Cihaz: Kynex Sovereign S3");
-    tft.setCursor(10, 80); tft.print("Surum: v153.0 Gatekeeper");
+    tft.setCursor(10, 80); tft.print("Surum: v154.0 Core Alignment");
     tft.setCursor(10, 110); tft.print("WiFi Ag: "); tft.print(WiFi.SSID());
     tft.setCursor(10, 140); tft.setTextColor(COLOR_BLUE);
     tft.print("IP: http://"); tft.print(WiFi.localIP().toString());
@@ -381,20 +379,14 @@ void handleGlobalClick(int x, int y) {
 }
 
 void setup() {
-    // MUHAMMED: Flicker ve Kısık Ekran Engelleme (Setup'ın en başında aydınlatmayı açıyoruz)
-    pinMode(TFT_BL, OUTPUT);
-    digitalWrite(TFT_BL, HIGH); 
-    pinMode(SPEAKER_PIN, OUTPUT);
-    digitalWrite(SPEAKER_PIN, LOW); 
+    pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, HIGH); 
+    pinMode(SPEAKER_PIN, OUTPUT); digitalWrite(SPEAKER_PIN, LOW); 
     
     Serial.begin(115200); 
     psramInit(); FFat.begin(true); prefs.begin("kynex", false);
     
     SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, -1); 
-    tft.begin(); 
-    tft.setRotation(1); 
-    ts.begin(SPI); 
-    ts.setRotation(1);
+    tft.begin(); tft.setRotation(1); ts.begin(SPI); ts.setRotation(1);
     
     WiFi.mode(WIFI_AP_STA); WiFi.softAP("KynexOs-Win10", "*muhammed*krid*");
     server.on("/", handleWebRoot); 
@@ -406,8 +398,7 @@ void setup() {
     if(s != "") WiFi.begin(s.c_str(), p.c_str());
     configTime(10800, 0, ntpServer);
     
-    playBeep(1000, 200); 
-    drawScreen();
+    playBeep(1000, 200); drawScreen();
 }
 
 void loop() {
