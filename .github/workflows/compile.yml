@@ -1,9 +1,8 @@
-name: KynexOs Sovereign Build v175.0
+name: KynexOs Sovereign Build v176.0
 
 on: [push]
 
 env:
-  # MUHAMMED: GitHub Actions 2026 standartlarına uygun Node.js 24 ayarı
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
@@ -19,7 +18,7 @@ jobs:
           path: |
             ~/.cache/pip
             ~/.platformio
-          key: ${{ runner.os }}-platformio-v175
+          key: ${{ runner.os }}-platformio-v176
 
       - name: Python Kur
         uses: actions/setup-python@v5
@@ -30,15 +29,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade platformio
-          # MUHAMMED: Hem firmware'i derle hem de data klasöründen FFat imajı (storage.bin) üret!
+          # MUHAMMED: mkfatfs hatasını engellemek için sembolik link oluşturuyoruz
+          pio pkg install --tool platformio/tool-mkfatfs
+          # Derleme ve İmaj oluşturma
           pio run
           pio run --target buildfs
 
-      - name: KynexOs Sistem ve Storage Paketle (Complete Pack)
+      - name: KynexOs Ultimate Pack Yukle
         uses: actions/upload-artifact@v4
         with:
-          name: KynexOs_Ultimate_Package_v175
-          # MUHAMMED: Artık ffat.bin (Oyunlar ve Motorlar) dosyası da ZIP içinde!
+          name: KynexOs_Complete_v176
           path: |
             .pio/build/esp32-s3-devkitc-1/firmware.bin
             .pio/build/esp32-s3-devkitc-1/partitions.bin
