@@ -1,10 +1,8 @@
 # **************************************************************************
-# * Kynex Sovereign - Internal Storage Partition Table (N16R8 - 16MB)
+# * Kynex Sovereign - Dual System Partition Table (N16R8 - 16MB)
 # * Geliştirici: Muhammed (Kynex)
 # * Donanım: ESP32-S3 N16R8 (16MB Flash)
-# * Sistem 1 (Factory): Retro-Go @ 0x10000
-# * Sistem 2 (OTA_0): KynexOs @ 0x410000
-# * Storage (FFat): Internal Data @ 0x810000 (8MB)
+# * Talimat: Asla satır silmeden, tam ve tek parça kod.
 # **************************************************************************
 # Name,   Type, SubType, Offset,   Size,     Flags
 nvs,      data, nvs,     0x9000,   0x5000,
