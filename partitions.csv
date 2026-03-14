@@ -1,16 +1,15 @@
 # **************************************************************************
-# * Kynex Sovereign Retro-Go Partition Table (16MB Pure Retro Mode)
+# * Kynex Sovereign Master Partition Table (N16R8 - 16MB)
 # * Geliştirici: Muhammed (Kynex)
-# * Donanım: ESP32-S3 N16R8 (16MB Flash)
 # * Adres Planı:
-# * - 0x00000  -> Bootloader
-# * - 0x08000  -> Partition Table
-# * - 0x10000  -> Launcher (Retro-Go Menü - 4MB)
-# * - 0x410000 -> FFat (Oyunlar + Çekirdekler - 11.9MB)
+# * - 0x10000  -> Retro-Go Launcher (4MB)
+# * - 0x410000 -> KynexOs (8MB)
+# * - 0xC10000 -> Storage (3.9MB - Oyunlar ve Çekirdekler)
 # * Talimat: Asla satır silmeden, tam ve tek parça kod.
 # **************************************************************************
 # Name,   Type, SubType, Offset,   Size,     Flags
 nvs,      data, nvs,     0x9000,   0x5000,
 otadata,  data, ota,     0xe000,   0x2000,
 factory,  app,  factory, 0x10000,  0x400000,
-ffat,     data, fat,     0x410000, 0xBF0000,
+ota_0,    app,  ota_0,   0x410000, 0x800000,
+ffat,     data, fat,     0xC10000, 0x3F0000,
