@@ -1,12 +1,12 @@
 # **************************************************************************
-# * Kynex Sovereign - KynexOs Mainframe CI v226.0
+# * Kynex Sovereign - KynexOs Mainframe CI v230.0
 # * Geliştirici: Muhammed (Kynex)
 # * Görev: KynexOs firmware'i ve Data (FFat) imajını tek hamlede derler.
-# * Hata Düzeltme: mkfatfs 2.20000.0 versiyon hatası bypass edildi.
+# * Hata Düzeltme: "mkffat: not found" Symlink Hack (Köprü) Geri Getirildi.
 # * Talimat: Asla satır silmeden, tam ve tek parça kod blokları içinde ver.
 # **************************************************************************
 
-name: KynexOs Sovereign Build v226.0
+name: KynexOs Sovereign Build v230.0
 
 on: [push]
 
@@ -27,29 +27,36 @@ jobs:
           path: |
             ~/.cache/pip
             ~/.platformio
-          key: ${{ runner.os }}-platformio-v226
+          key: ${{ runner.os }}-platformio-v230
 
       - name: Python Kur
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: PlatformIO Yukle ve Guncelle
+      - name: PlatformIO Yukle ve Arac Onarimi (Symlink Hack)
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade platformio
+          # Aracın doğru ve uyumlu sürümünü global olarak indiriyoruz
+          pio pkg install --global --tool "platformio/tool-mkfatfs@~2.0.0"
+          
+          # MUHAMMED: Senin o harika "Symlink Hack" taktiğini uyguluyoruz!
+          # PlatformIO "mkffat" arıyor, biz ona "mkfatfs" aracını "mkffat" maskesiyle veriyoruz.
+          MKFATFS_PATH=$(find ~/.platformio/packages/tool-mkfatfs -name "mkfatfs" | head -n 1)
+          sudo ln -s "$MKFATFS_PATH" /usr/bin/mkffat
+          echo "Arac koprusu kuruldu: $MKFATFS_PATH -> /usr/bin/mkffat"
 
       - name: KynexOs ve Storage Derle
         run: |
           # MUHAMMED: Once firmware, sonra data klasorunden FFat imajı üret!
-          # Hatalı mkfatfs sürümünü platformio.ini içindeki platform_packages ile ezeceğiz.
           pio run
           pio run --target buildfs
 
       - name: KynexOs Ultimate Pack Yukle
         uses: actions/upload-artifact@v4
         with:
-          name: KynexOs_Final_Package_v226
+          name: KynexOs_Final_Package_v230
           path: |
             .pio/build/*/firmware.bin
             .pio/build/*/partitions.bin
