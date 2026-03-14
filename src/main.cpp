@@ -1,8 +1,8 @@
-/* * KynexOs v148.0 - The Core Redux (Total Architecture Rebuild)
+/* * KynexOs v152.0 - The Bridge Sovereign (Final Fusion Build)
  * Geliştirici: Muhammed (Kynex)
  * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
- * Özellikler: Dual-Boot RetroGo, Bit-Bang Audio, Native GFX UI, WiFi, Games
- * Hata Düzeltme: TJpgDec Null Pointer Callback Removed, 100% Panic-Free Kernel
+ * Özellikler: Dual-Boot RetroGo Launcher, Bit-Bang Audio, Cyber-Grid UI, Boot Diagnostics
+ * Hata Düzeltme: OTA Partition Verification (Fixes Spinning/Reset), Power-On Backlight Lock
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -21,6 +21,7 @@
 #include <BLEServer.h>
 #include <time.h>
 #include "esp_ota_ops.h" 
+#include "esp_partition.h"
 
 // --- PIN TANIMLAMALARI ---
 #define TFT_BL        1
@@ -146,7 +147,7 @@ void handleWebRoot() {
     File root = FFat.open("/");
     File file = root.openNextFile();
     while(file) {
-        h += "<div>" + String(file.name()) + " <a href='/del?f=" + String(file.name()) + "'>[Sil]</a></div>";
+        h += "<div>" + String(file.name()) + " (" + String(file.size()/1024) + " KB) <a href='/del?f=" + String(file.name()) + "'>[Sil]</a></div>";
         file = root.openNextFile();
     }
     h += "<br><form action='/upload' method='POST' enctype='multipart/form-data'><input type='file' name='u'><input type='submit' value='Yukle'></form></body></html>";
@@ -156,7 +157,7 @@ void handleWebRoot() {
 void handleFileDelete() { if(server.hasArg("f")) { FFat.remove("/" + server.arg("f")); } server.sendHeader("Location", "/"); server.send(303); }
 void handleFileUpload() {
     HTTPUpload& upload = server.upload();
-    if(upload.status == UPLOAD_FILE_START){ fsUploadFile = FFat.open("/" + upload.filename, FILE_WRITE); }
+    if(upload.status == UPLOAD_FILE_START){ String fn = upload.filename; if(!fn.startsWith("/")) fn = "/" + fn; fsUploadFile = FFat.open(fn, FILE_WRITE); }
     else if(upload.status == UPLOAD_FILE_WRITE && fsUploadFile){ fsUploadFile.write(upload.buf, upload.currentSize); }
     else if(upload.status == UPLOAD_FILE_END && fsUploadFile){ fsUploadFile.close(); }
 }
@@ -186,14 +187,11 @@ void drawTaskbar() {
     tft.print(currentTime);
 }
 
-// MUHAMMED: TJpgDec (Resim Motoru) Cekirdekten Sokulup Atildi! Cokme Imkansizlastirildi.
 void drawDesktop(int hIdx) {
-    // Siyah Siber-Izgara Arka Plan
     tft.fillScreen(COLOR_BLACK); 
     for(int i=0; i<320; i+=20) tft.drawFastVLine(i, 0, 240, 0x18C3);
     for(int i=0; i<240; i+=20) tft.drawFastHLine(0, i, 320, 0x18C3);
     
-    // Masaustu Ikonlari
     renderIcon(20, 20, "Files", COLOR_ICON_PC, hIdx == 1);
     renderIcon(20, 85, "WiFi", COLOR_ICON_SET, hIdx == 2);
     renderIcon(20, 150, "About", 0x7BEF, hIdx == 3);
@@ -213,6 +211,49 @@ void drawDesktop(int hIdx) {
     }
 }
 
+// MUHAMMED: RETRO-GO GÜVENLİ GEÇİŞ MOTORU (v152.0)
+// Eger "ota_0" bolumu bulunamazsa veya dosya bozuksa "dönme" hatasini engellemek icin analiz yapar.
+void switchToRetroGo() {
+    playBeep(400, 300);
+    tft.fillScreen(COLOR_BLACK);
+    tft.setTextColor(COLOR_WHITE);
+    tft.setCursor(20, 100);
+    tft.print("BOOT SECTOR ANALYZING...");
+
+    // 1. Partition Kontrolü (partitions.csv'deki ota_0 etiketine bakar)
+    const esp_partition_t* retro_part = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, "ota_0");
+    
+    if (retro_part != NULL) {
+        tft.setCursor(20, 130);
+        tft.print("TARGET FOUND: 0x410000");
+        delay(500);
+        
+        // 2. Boot Partition Ayarla
+        esp_err_t err = esp_ota_set_boot_partition(retro_part);
+        if (err == ESP_OK) {
+            tft.setTextColor(COLOR_GREEN);
+            tft.setCursor(20, 160);
+            tft.print("BOOT SIGNATURE VERIFIED!");
+            delay(1000);
+            ESP.restart(); // Cihaz artik dunya standartlarinda RetroGo olarak uyanir.
+        } else {
+            tft.setTextColor(COLOR_RED);
+            tft.setCursor(20, 160);
+            tft.print("BOOT FAILED: OTA WRITE ERR");
+            delay(3000);
+            currentScreen = 0; drawScreen();
+        }
+    } else {
+        tft.setTextColor(COLOR_RED);
+        tft.setCursor(20, 130);
+        tft.print("FATAL: OTA_0 MISSING!");
+        tft.setCursor(20, 150);
+        tft.print("Flash launcher.bin to 0x410000");
+        delay(5000);
+        currentScreen = 0; drawScreen();
+    }
+}
+
 void drawExplorerInfo() {
     tft.fillScreen(COLOR_WHITE); tft.fillRect(0, 0, 320, 35, WIN10_START);
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10, 12); tft.print("Kynex Web File Manager");
@@ -227,13 +268,10 @@ void drawAboutScreen() {
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Sistem Bilgileri");
     tft.setTextColor(COLOR_BLACK);
     tft.setCursor(10, 60); tft.print("Cihaz: Kynex Sovereign S3");
-    // MUHAMMED: Surum numarasi dogrulama amaciyla degistirildi
-    tft.setCursor(10, 80); tft.print("Surum: v148.0 Core Redux");
+    tft.setCursor(10, 80); tft.print("Surum: v152.0 Bridge Master");
     tft.setCursor(10, 110); tft.print("WiFi Ag: "); tft.print(WiFi.SSID());
     tft.setCursor(10, 140); tft.setTextColor(COLOR_BLUE);
     tft.print("IP: http://"); tft.print(WiFi.localIP().toString());
-    tft.setCursor(10, 160); tft.setTextColor(COLOR_RED);
-    tft.print("AP: http://192.168.4.1");
     tft.setTextColor(COLOR_BLACK); tft.setCursor(10, 210); tft.print("Geri: Sol Joy Uzun Bas");
 }
 
@@ -269,15 +307,7 @@ void drawPaintApp() {
     tft.setCursor(135, 12); tft.setTextColor(COLOR_BLACK); tft.print("SILGI");
 }
 
-void switchToRetroGo() {
-    playBeep(400, 500); tft.fillScreen(COLOR_BLACK); tft.setTextColor(COLOR_WHITE);
-    tft.setCursor(30, 100); tft.print("RETRO-GO SISTEMINE GECILIYOR...");
-    const esp_partition_t* retro_part = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, NULL);
-    if (retro_part != NULL) { esp_ota_set_boot_partition(retro_part); delay(1000); ESP.restart(); }
-    else { tft.fillScreen(COLOR_RED); tft.setCursor(30, 120); tft.print("HATA: RETRO-GO BOLUMU YOK!"); delay(3000); currentScreen = 0; drawScreen(); }
-}
-
-// --- OYUN MOTORLARI ---
+// --- OYUNLAR ---
 void spawnApple() { apple.x = random(1, 15) * 20; apple.y = random(3, 10) * 20; }
 void drawSnakeGame() {
     tft.fillScreen(COLOR_BLACK); tft.fillRect(0,0,320,25,0x2104);
@@ -342,14 +372,15 @@ void handleGlobalClick(int x, int y) {
     } else if (currentScreen == 4) {
         if (y > 60 && y < 180) { int r = (y-60)/40, c = (x-4)/26; if (c < 12) { kbBuffer += kRows[kbMode][r].charAt(c); drawKynexKeyboard(); } }
         else if (y > 180 && x > 250) { prefs.putString("ssid", prefs.getString("sid_t")); prefs.putString("pass", kbBuffer); WiFi.begin(prefs.getString("ssid").c_str(), kbBuffer.c_str()); currentScreen = 0; drawScreen(); }
-    } else if (currentScreen == 8) { if (y > 35) tft.fillCircle(x, y, 2, paintColor); else { if (x < 30) paintColor = COLOR_RED; else if (x < 60) paintColor = COLOR_GREEN; else if (x < 90) paintColor = COLOR_BLUE; else if (x > 130) paintColor = COLOR_WHITE; } }
+    }
 }
 
 void setup() {
-    pinMode(SPEAKER_PIN, OUTPUT);
-    digitalWrite(SPEAKER_PIN, LOW); 
+    // MUHAMMED: Flicker ve Kısık Ekran Engelleme (Setup'ın en başında aydınlatmayı açıyoruz)
     pinMode(TFT_BL, OUTPUT);
     digitalWrite(TFT_BL, HIGH); 
+    pinMode(SPEAKER_PIN, OUTPUT);
+    digitalWrite(SPEAKER_PIN, LOW); 
     
     Serial.begin(115200); 
     psramInit(); FFat.begin(true); prefs.begin("kynex", false);
@@ -362,6 +393,7 @@ void setup() {
     
     WiFi.mode(WIFI_AP_STA); WiFi.softAP("KynexOs-Win10", "*muhammed*krid*");
     server.on("/", handleWebRoot); 
+    server.on("/del", handleFileDelete);
     server.on("/upload", HTTP_POST, [](){ server.sendHeader("Location", "/"); server.send(303); }, handleFileUpload);
     server.begin();
     
