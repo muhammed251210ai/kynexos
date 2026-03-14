@@ -3,7 +3,7 @@
 # * Geliştirici: Muhammed (Kynex)
 # * Donanım: ESP32-S3 N16R8 (16MB Flash)
 # * Sistem 1 (Factory): Retro-Go @ 0x10000
-# * Sistem 2 (OTA_0): KynexOs @ 0x410000
+# * Sistem 2 (OTA_0): KynexOs @ 0x410000 (Şimdilik Boş)
 # * Storage (FFat): Cores & Roms @ 0x810000
 # * Talimat: Asla satır silmeden, tam ve tek parça kod.
 # **************************************************************************
