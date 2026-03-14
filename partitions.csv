@@ -1,10 +1,10 @@
 # **************************************************************************
-# * Kynex Sovereign - Dual System Partition Table (N16R8 - 16MB)
+# * Kynex Sovereign - WiFi Optimized Partition Table (N16R8 - 16MB)
 # * Geliştirici: Muhammed (Kynex)
 # * Donanım: ESP32-S3 N16R8 (16MB Flash)
 # * Sistem 1 (Factory): Retro-Go @ 0x10000
-# * Sistem 2 (OTA_0): KynexOs @ 0x410000 (Şimdilik Boş)
-# * Storage (FFat): Cores & Roms @ 0x810000
+# * Sistem 2 (OTA_0): KynexOs @ 0x410000 (Gelecek İçin Hazır)
+# * Storage (FFat): WiFi Upload Area @ 0x810000
 # * Talimat: Asla satır silmeden, tam ve tek parça kod.
 # **************************************************************************
 # Name,   Type, SubType, Offset,   Size,     Flags
