@@ -1,4 +1,4 @@
-/* * KynexOs v152.0 - The Bridge Sovereign (Final Fusion Build)
+/* * KynexOs v153.0 - The Gatekeeper (Validation & Boot Fix)
  * Geliştirici: Muhammed (Kynex)
  * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
  * Özellikler: Dual-Boot RetroGo Launcher, Bit-Bang Audio, Cyber-Grid UI, Boot Diagnostics
@@ -22,6 +22,7 @@
 #include <time.h>
 #include "esp_ota_ops.h" 
 #include "esp_partition.h"
+#include "esp_image_format.h" // MUHAMMED: Binary doğrulama kütüphanesi
 
 // --- PIN TANIMLAMALARI ---
 #define TFT_BL        1
@@ -211,8 +212,7 @@ void drawDesktop(int hIdx) {
     }
 }
 
-// MUHAMMED: RETRO-GO GÜVENLİ GEÇİŞ MOTORU (v152.0)
-// Eger "ota_0" bolumu bulunamazsa veya dosya bozuksa "dönme" hatasini engellemek icin analiz yapar.
+// MUHAMMED: RETRO-GO GÜVENLİ GEÇİŞ MOTORU (v153.0 Gatekeeper)
 void switchToRetroGo() {
     playBeep(400, 300);
     tft.fillScreen(COLOR_BLACK);
@@ -220,27 +220,32 @@ void switchToRetroGo() {
     tft.setCursor(20, 100);
     tft.print("BOOT SECTOR ANALYZING...");
 
-    // 1. Partition Kontrolü (partitions.csv'deki ota_0 etiketine bakar)
+    // 1. Partition Kontrolü
     const esp_partition_t* retro_part = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, "ota_0");
     
     if (retro_part != NULL) {
         tft.setCursor(20, 130);
-        tft.print("TARGET FOUND: 0x410000");
+        tft.printf("TARGET FOUND: 0x%06X", retro_part->address);
         delay(500);
         
-        // 2. Boot Partition Ayarla
-        esp_err_t err = esp_ota_set_boot_partition(retro_part);
-        if (err == ESP_OK) {
+        // 2. Binary Header Doğrulaması (Çökmeyi engelleyen sihir burada)
+        esp_image_metadata_t data;
+        const esp_partition_pos_t pos = { .offset = retro_part->address, .size = retro_part->size };
+        
+        if (esp_image_verify(ESP_IMAGE_VERIFY, &pos, &data) == ESP_OK) {
             tft.setTextColor(COLOR_GREEN);
             tft.setCursor(20, 160);
-            tft.print("BOOT SIGNATURE VERIFIED!");
-            delay(1000);
-            ESP.restart(); // Cihaz artik dunya standartlarinda RetroGo olarak uyanir.
+            tft.print("HEADER VERIFIED! REBOOTING...");
+            esp_ota_set_boot_partition(retro_part);
+            delay(1500);
+            ESP.restart(); 
         } else {
             tft.setTextColor(COLOR_RED);
             tft.setCursor(20, 160);
-            tft.print("BOOT FAILED: OTA WRITE ERR");
-            delay(3000);
+            tft.print("ERROR: INVALID S3 FIRMWARE!");
+            tft.setCursor(20, 180);
+            tft.print("Re-flash launcher.bin (DIO)");
+            delay(5000);
             currentScreen = 0; drawScreen();
         }
     } else {
@@ -248,7 +253,7 @@ void switchToRetroGo() {
         tft.setCursor(20, 130);
         tft.print("FATAL: OTA_0 MISSING!");
         tft.setCursor(20, 150);
-        tft.print("Flash launcher.bin to 0x410000");
+        tft.print("Check partitions.bin at 0x8000");
         delay(5000);
         currentScreen = 0; drawScreen();
     }
@@ -268,7 +273,7 @@ void drawAboutScreen() {
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Sistem Bilgileri");
     tft.setTextColor(COLOR_BLACK);
     tft.setCursor(10, 60); tft.print("Cihaz: Kynex Sovereign S3");
-    tft.setCursor(10, 80); tft.print("Surum: v152.0 Bridge Master");
+    tft.setCursor(10, 80); tft.print("Surum: v153.0 Gatekeeper");
     tft.setCursor(10, 110); tft.print("WiFi Ag: "); tft.print(WiFi.SSID());
     tft.setCursor(10, 140); tft.setTextColor(COLOR_BLUE);
     tft.print("IP: http://"); tft.print(WiFi.localIP().toString());
