@@ -1,8 +1,8 @@
-/* * KynexOs v166.0 - The Smart Installer (Web FM Routing)
+/* * KynexOs v167.0 - The Underground OS (Secondary System)
  * Geliştirici: Muhammed (Kynex)
- * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
+ * Donanım: ESP32-S3 N16R8
  * Özellikler: Dual-Boot RetroGo Launcher, Cyber-Grid UI, Smart Web Router
- * Hata Düzeltme: Auto-creates Retro-Go folder structures for .bin, .nes, .wad files
+ * Hata Düzeltme: Partition mapping inverted. KynexOs is now OTA_0, RetroGo is Factory.
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -142,7 +142,7 @@ JoyData readJoy(int px, int py, int psw) {
     return d;
 }
 
-// --- WEB FM (SMART ROUTER EKLENDİ) ---
+// --- WEB FM (SMART ROUTER) ---
 void handleWebRoot() {
     String h = "<html><head><meta charset='UTF-8'></head><body style='font-family:sans-serif;'><h1>Kynex Sovereign Web FM</h1><hr>";
     File root = FFat.open("/");
@@ -164,28 +164,19 @@ void handleFileUpload() {
         String fn = upload.filename; 
         if(!fn.startsWith("/")) fn = "/" + fn; 
         
-        // MUHAMMED: AKILLI KLASÖR YÖNLENDİRME MOTORU BURASI!
         if (fn.endsWith("core.bin") || fn.endsWith("-go.bin") || fn.endsWith("fmsx.bin")) {
-            FFat.mkdir("/retro-go"); 
-            FFat.mkdir("/retro-go/cores");
-            fn = "/retro-go/cores" + fn;
+            FFat.mkdir("/retro-go"); FFat.mkdir("/retro-go/cores"); fn = "/retro-go/cores" + fn;
         } else if (fn.endsWith(".nes")) {
-            FFat.mkdir("/roms"); 
-            FFat.mkdir("/roms/nes");
-            fn = "/roms/nes" + fn;
+            FFat.mkdir("/roms"); FFat.mkdir("/roms/nes"); fn = "/roms/nes" + fn;
         } else if (fn.endsWith(".wad")) {
-            FFat.mkdir("/roms"); 
-            FFat.mkdir("/roms/doom");
-            fn = "/roms/doom" + fn;
+            FFat.mkdir("/roms"); FFat.mkdir("/roms/doom"); fn = "/roms/doom" + fn;
         }
-        
         fsUploadFile = FFat.open(fn, FILE_WRITE); 
     }
     else if(upload.status == UPLOAD_FILE_WRITE && fsUploadFile){ fsUploadFile.write(upload.buf, upload.currentSize); }
     else if(upload.status == UPLOAD_FILE_END && fsUploadFile){ fsUploadFile.close(); }
 }
 
-// --- SİSTEM BİLEŞENLERİ ---
 void updateClock() {
     struct tm timeinfo;
     if(!getLocalTime(&timeinfo)){ return; }
@@ -214,17 +205,13 @@ void drawDesktop(int hIdx) {
     tft.fillScreen(COLOR_BLACK); 
     for(int i=0; i<320; i+=20) tft.drawFastVLine(i, 0, 240, 0x18C3);
     for(int i=0; i<240; i+=20) tft.drawFastHLine(0, i, 320, 0x18C3);
-    
     renderIcon(20, 20, "Files", COLOR_ICON_PC, hIdx == 1);
     renderIcon(20, 85, "WiFi", COLOR_ICON_SET, hIdx == 2);
     renderIcon(20, 150, "About", 0x7BEF, hIdx == 3);
-    
     renderIcon(90, 20, "RetroGo", RETRO_GOLD, hIdx == 4); 
     renderIcon(90, 85, "Paint", COLOR_RED, hIdx == 5);
     renderIcon(90, 150, "Snake", COLOR_GREEN, hIdx == 6);
-    
     drawTaskbar();
-    
     if (startMenuOpen) {
         tft.fillRect(0, 40, 170, 175, WIN10_TASKBAR);
         tft.drawRect(0, 40, 170, 175, WIN10_START);
@@ -234,48 +221,28 @@ void drawDesktop(int hIdx) {
     }
 }
 
-// MUHAMMED: KÖRKÜTÜK GEÇİŞ MOTORU 
+// MUHAMMED: KYNEX ARTIK 2. SİSTEM. ANA SİSTEME (FACTORY) GERİ DÖNÜŞ!
 void switchToRetroGo() {
     playBeep(400, 300);
     tft.fillScreen(COLOR_BLACK);
     tft.setTextColor(COLOR_WHITE);
     tft.setCursor(20, 100);
-    tft.print("BOOT SECTOR ANALYZING...");
-
-    const esp_partition_t* retro_part = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, NULL);
+    tft.print("RETURNING TO MAIN SYSTEM...");
+    
+    // Artık RetroGo Ana Sistem (Factory) olduğu için oraya zıplıyoruz.
+    const esp_partition_t* retro_part = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, NULL);
     
     if (retro_part != NULL) {
-        tft.setCursor(20, 130);
-        tft.printf("TARGET FOUND: 0x%06X", retro_part->address);
-        delay(500);
-        
         esp_image_metadata_t data;
         const esp_partition_pos_t pos = { .offset = retro_part->address, .size = retro_part->size };
-        
         if (esp_image_verify(ESP_IMAGE_VERIFY, &pos, &data) == ESP_OK) {
-            tft.setTextColor(COLOR_GREEN);
-            tft.setCursor(20, 160);
-            tft.print("HEADER VERIFIED! REBOOTING...");
+            tft.setTextColor(COLOR_GREEN); tft.setCursor(20, 160); tft.print("MAIN SYSTEM VERIFIED!");
             esp_ota_set_boot_partition(retro_part);
-            delay(1500);
-            ESP.restart(); 
+            delay(1500); ESP.restart(); 
         } else {
-            tft.setTextColor(COLOR_RED);
-            tft.setCursor(20, 160);
-            tft.print("ERROR: INVALID S3 FIRMWARE!");
-            tft.setCursor(20, 180);
-            tft.print("Re-flash launcher.bin (DIO)");
-            delay(5000);
-            currentScreen = 0; drawScreen();
+            tft.setTextColor(COLOR_RED); tft.setCursor(20, 160); tft.print("ERROR: INVALID MAIN FIRMWARE!");
+            delay(5000); currentScreen = 0; drawScreen();
         }
-    } else {
-        tft.setTextColor(COLOR_RED);
-        tft.setCursor(20, 130);
-        tft.print("FATAL: OTA_0 MISSING!");
-        tft.setCursor(20, 150);
-        tft.print("Check partitions.bin at 0x8000");
-        delay(5000);
-        currentScreen = 0; drawScreen();
     }
 }
 
@@ -293,7 +260,7 @@ void drawAboutScreen() {
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Sistem Bilgileri");
     tft.setTextColor(COLOR_BLACK);
     tft.setCursor(10, 60); tft.print("Cihaz: Kynex Sovereign S3");
-    tft.setCursor(10, 80); tft.print("Surum: v166.0 Smart Web FM");
+    tft.setCursor(10, 80); tft.print("Surum: v167.0 Underground OS");
     tft.setCursor(10, 110); tft.print("WiFi Ag: "); tft.print(WiFi.SSID());
     tft.setCursor(10, 140); tft.setTextColor(COLOR_BLUE);
     tft.print("IP: http://"); tft.print(WiFi.localIP().toString());
@@ -332,7 +299,6 @@ void drawPaintApp() {
     tft.setCursor(135, 12); tft.setTextColor(COLOR_BLACK); tft.print("SILGI");
 }
 
-// --- OYUNLAR ---
 void spawnApple() { apple.x = random(1, 15) * 20; apple.y = random(3, 10) * 20; }
 void drawSnakeGame() {
     tft.fillScreen(COLOR_BLACK); tft.fillRect(0,0,320,25,0x2104);
