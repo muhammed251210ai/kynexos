@@ -1,12 +1,10 @@
 # **************************************************************************
-# * KynexOs v184.0 - Master Partition Table (16MB Flash Map)
+# * KynexOs & Retro-Go Sovereign Partition Table (N16R8 - 16MB)
 # * Geliştirici: Muhammed (Kynex)
-# * Donanım: ESP32-S3 N16R8 (16MB Flash)
 # * Adres Planı:
-# * - Bootloader & Partitions: 0x0 - 0x10000
-# * - Factory (Retro-Go): 4MB @ 0x10000
-# * - OTA_0 (KynexOs): 8MB @ 0x410000
-# * - FFat (Storage): 3.9MB @ 0xC10000
+# * - 0x10000  -> Retro-Go (Ana Sistem / Factory)
+# * - 0x410000 -> KynexOs (2. Sistem / OTA_0)
+# * - 0xC10000 -> Storage (Oyunlar ve Cores / FFat)
 # * Talimat: Asla satır silmeden, tam ve tek parça kod.
 # **************************************************************************
 # Name,   Type, SubType, Offset,   Size,     Flags
