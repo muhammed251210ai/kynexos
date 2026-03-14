@@ -1,8 +1,9 @@
-name: KynexOs Sovereign Build v176.0
+name: KynexOs Sovereign Build v177.0
 
 on: [push]
 
 env:
+  # MUHAMMED: GitHub Actions 2026 standartlarına uygun Node.js 24 ayarı
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
@@ -18,27 +19,34 @@ jobs:
           path: |
             ~/.cache/pip
             ~/.platformio
-          key: ${{ runner.os }}-platformio-v176
+          key: ${{ runner.os }}-platformio-v177
 
       - name: Python Kur
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: PlatformIO Yukle ve Derle
+      - name: PlatformIO Yukle ve Arac Onarimi
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade platformio
-          # MUHAMMED: mkfatfs hatasını engellemek için sembolik link oluşturuyoruz
+          # MUHAMMED: Eksik aracı (mkfatfs) zorla indiriyoruz
           pio pkg install --tool platformio/tool-mkfatfs
-          # Derleme ve İmaj oluşturma
+          # MUHAMMED: "mkffat: not found" hatasını çözmek için köprü kuruyoruz (Symlink Hack)
+          MKFATFS_PATH=$(find ~/.platformio/packages/tool-mkfatfs -name "mkfatfs" | head -n 1)
+          sudo ln -s "$MKFATFS_PATH" /usr/bin/mkffat
+          echo "Arac kòprüsü kuruldu: $MKFATFS_PATH -> /usr/bin/mkffat"
+
+      - name: KynexOs ve Storage Derle
+        run: |
+          # MUHAMMED: Once firmware, sonra data klasorunden FFat imajı üret!
           pio run
           pio run --target buildfs
 
       - name: KynexOs Ultimate Pack Yukle
         uses: actions/upload-artifact@v4
         with:
-          name: KynexOs_Complete_v176
+          name: KynexOs_Final_Package_v177
           path: |
             .pio/build/esp32-s3-devkitc-1/firmware.bin
             .pio/build/esp32-s3-devkitc-1/partitions.bin
