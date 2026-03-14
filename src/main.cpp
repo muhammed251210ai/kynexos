@@ -1,8 +1,8 @@
-/* * KynexOs v156.0 - The Clean Boot (Ghost Pointer Fix)
+/* * KynexOs v166.0 - The Smart Installer (Web FM Routing)
  * Geliştirici: Muhammed (Kynex)
  * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
- * Özellikler: Dual-Boot RetroGo Launcher, Bit-Bang Audio, Cyber-Grid UI
- * Hata Düzeltme: Removed Ghost Wallpaper Pointers (Fixes Instant Hard-Reset)
+ * Özellikler: Dual-Boot RetroGo Launcher, Cyber-Grid UI, Smart Web Router
+ * Hata Düzeltme: Auto-creates Retro-Go folder structures for .bin, .nes, .wad files
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -142,7 +142,7 @@ JoyData readJoy(int px, int py, int psw) {
     return d;
 }
 
-// --- WEB FM ---
+// --- WEB FM (SMART ROUTER EKLENDİ) ---
 void handleWebRoot() {
     String h = "<html><head><meta charset='UTF-8'></head><body style='font-family:sans-serif;'><h1>Kynex Sovereign Web FM</h1><hr>";
     File root = FFat.open("/");
@@ -151,14 +151,36 @@ void handleWebRoot() {
         h += "<div>" + String(file.name()) + " (" + String(file.size()/1024) + " KB) <a href='/del?f=" + String(file.name()) + "'>[Sil]</a></div>";
         file = root.openNextFile();
     }
-    h += "<br><form action='/upload' method='POST' enctype='multipart/form-data'><input type='file' name='u'><input type='submit' value='Yukle'></form></body></html>";
+    h += "<br><p style='color:blue;'><b>AKILLI YONLENDİRME AKTİF:</b> .bin dosyaları /cores klasorune, .nes ve .wad oyunları otomatik olarak /roms klasorune gonderilir!</p>";
+    h += "<form action='/upload' method='POST' enctype='multipart/form-data'><input type='file' name='u'><input type='submit' value='Yukle'></form></body></html>";
     server.send(200, "text/html", h);
 }
 
 void handleFileDelete() { if(server.hasArg("f")) { FFat.remove("/" + server.arg("f")); } server.sendHeader("Location", "/"); server.send(303); }
+
 void handleFileUpload() {
     HTTPUpload& upload = server.upload();
-    if(upload.status == UPLOAD_FILE_START){ String fn = upload.filename; if(!fn.startsWith("/")) fn = "/" + fn; fsUploadFile = FFat.open(fn, FILE_WRITE); }
+    if(upload.status == UPLOAD_FILE_START){ 
+        String fn = upload.filename; 
+        if(!fn.startsWith("/")) fn = "/" + fn; 
+        
+        // MUHAMMED: AKILLI KLASÖR YÖNLENDİRME MOTORU BURASI!
+        if (fn.endsWith("core.bin") || fn.endsWith("-go.bin") || fn.endsWith("fmsx.bin")) {
+            FFat.mkdir("/retro-go"); 
+            FFat.mkdir("/retro-go/cores");
+            fn = "/retro-go/cores" + fn;
+        } else if (fn.endsWith(".nes")) {
+            FFat.mkdir("/roms"); 
+            FFat.mkdir("/roms/nes");
+            fn = "/roms/nes" + fn;
+        } else if (fn.endsWith(".wad")) {
+            FFat.mkdir("/roms"); 
+            FFat.mkdir("/roms/doom");
+            fn = "/roms/doom" + fn;
+        }
+        
+        fsUploadFile = FFat.open(fn, FILE_WRITE); 
+    }
     else if(upload.status == UPLOAD_FILE_WRITE && fsUploadFile){ fsUploadFile.write(upload.buf, upload.currentSize); }
     else if(upload.status == UPLOAD_FILE_END && fsUploadFile){ fsUploadFile.close(); }
 }
@@ -271,7 +293,7 @@ void drawAboutScreen() {
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Sistem Bilgileri");
     tft.setTextColor(COLOR_BLACK);
     tft.setCursor(10, 60); tft.print("Cihaz: Kynex Sovereign S3");
-    tft.setCursor(10, 80); tft.print("Surum: v156.0 Clean Boot");
+    tft.setCursor(10, 80); tft.print("Surum: v166.0 Smart Web FM");
     tft.setCursor(10, 110); tft.print("WiFi Ag: "); tft.print(WiFi.SSID());
     tft.setCursor(10, 140); tft.setTextColor(COLOR_BLUE);
     tft.print("IP: http://"); tft.print(WiFi.localIP().toString());
@@ -383,11 +405,7 @@ void setup() {
     pinMode(SPEAKER_PIN, OUTPUT); digitalWrite(SPEAKER_PIN, LOW); 
     
     Serial.begin(115200); 
-    
-    // MUHAMMED: PSRAM GERİ DÖNDÜ! (v160.0 ile QIO_OPI modunda sorunsuz çalışacak)
-    psramInit(); 
-    
-    FFat.begin(true); prefs.begin("kynex", false);
+    psramInit(); FFat.begin(true); prefs.begin("kynex", false);
     
     SPI.begin(TFT_SCK, MISO_PIN, TFT_MOSI, -1); 
     tft.begin(); tft.setRotation(1); ts.begin(SPI); ts.setRotation(1);
