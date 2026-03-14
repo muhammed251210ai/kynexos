@@ -1,8 +1,8 @@
-/* * KynexOs v154.0 - The Core Alignment (Native Boot Fix)
+/* * KynexOs v156.0 - The Clean Boot (Ghost Pointer Fix)
  * Geliştirici: Muhammed (Kynex)
  * Donanım: ESP32-S3 N16R8 (DIO+OPI Hybrid)
- * Özellikler: Dual-Boot RetroGo Launcher, Bit-Bang Audio, Cyber-Grid UI, Header Verification
- * Hata Düzeltme: 0x10000 Native App Alignment (Fixes Instant Reset), Memory Map Sync
+ * Özellikler: Dual-Boot RetroGo Launcher, Bit-Bang Audio, Cyber-Grid UI
+ * Hata Düzeltme: Removed Ghost Wallpaper Pointers (Fixes Instant Hard-Reset)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -124,7 +124,7 @@ void drawPongGame();
 void updatePong(JoyData j1, JoyData j2);
 void switchToRetroGo();
 
-// MUHAMMED: %100 GUVENLI BIT-BANG SES MOTORU (LEDC ASLA YOK)
+// MUHAMMED: BIT-BANG SES MOTORU 
 void playBeep(int f, int d) { 
     if (f <= 0 || d <= 0) return;
     long halfPeriod = 1000000L / f / 2;
@@ -212,7 +212,7 @@ void drawDesktop(int hIdx) {
     }
 }
 
-// MUHAMMED: RETRO-GO GÜVENLİ GEÇİŞ MOTORU (v154.0 Alignment Fix)
+// MUHAMMED: KÖRKÜTÜK GEÇİŞ MOTORU 
 void switchToRetroGo() {
     playBeep(400, 300);
     tft.fillScreen(COLOR_BLACK);
@@ -220,7 +220,7 @@ void switchToRetroGo() {
     tft.setCursor(20, 100);
     tft.print("BOOT SECTOR ANALYZING...");
 
-    const esp_partition_t* retro_part = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, "ota_0");
+    const esp_partition_t* retro_part = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, NULL);
     
     if (retro_part != NULL) {
         tft.setCursor(20, 130);
@@ -271,7 +271,7 @@ void drawAboutScreen() {
     tft.setTextColor(COLOR_WHITE); tft.setCursor(10,12); tft.print("Sistem Bilgileri");
     tft.setTextColor(COLOR_BLACK);
     tft.setCursor(10, 60); tft.print("Cihaz: Kynex Sovereign S3");
-    tft.setCursor(10, 80); tft.print("Surum: v154.0 Core Alignment");
+    tft.setCursor(10, 80); tft.print("Surum: v156.0 Clean Boot");
     tft.setCursor(10, 110); tft.print("WiFi Ag: "); tft.print(WiFi.SSID());
     tft.setCursor(10, 140); tft.setTextColor(COLOR_BLUE);
     tft.print("IP: http://"); tft.print(WiFi.localIP().toString());
@@ -379,6 +379,7 @@ void handleGlobalClick(int x, int y) {
 }
 
 void setup() {
+    // MUHAMMED: Kilitlendi
     pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, HIGH); 
     pinMode(SPEAKER_PIN, OUTPUT); digitalWrite(SPEAKER_PIN, LOW); 
     
