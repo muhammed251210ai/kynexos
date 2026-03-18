@@ -1,8 +1,8 @@
 # **************************************************************************
-# * Kynex Sovereign - KynexOs DIO Shield CI v230.7
+# * Kynex Sovereign - Sovereign Wallpaper & DIO CI v230.8
 # * Geliştirici: Muhammed (Kynex)
-# * Görev: Tüm sistemi DIO (Dual I/O) modunda birleştirir.
-# * Hata Düzeltme: ets_loader Boot Loop + Linker ELF Not Found FIX
+# * Görev: KynexOs (DIO) + FFat Storage (Wallpaper) Derleme ve Paketleme.
+# * Hata Düzeltme: mkffat Symlink Hack + Esptool Forced DIO Merge
 # * Talimat: Asla satır silmeden, tam ve tek parça kod blokları içinde ver.
 # **************************************************************************
 
@@ -43,17 +43,15 @@ jobs:
           sudo ln -sf "$MKFATFS_PATH" /usr/bin/mkffat
           echo "Arac koprusu kuruldu: $MKFATFS_PATH -> /usr/bin/mkffat"
 
-      - name: KynexOs ve Storage Derle
+      - name: KynexOs ve FFat Storage Derle
         run: |
-          # MUHAMMED: Derleme sirasinda hata almamak icin PIO'yu QIO birakiyoruz
+          # MUHAMMED: Once firmware, sonra data/ klasorundeki wallpaper'i imaj yapar.
           pio run
           pio run --target buildfs
 
-      - name: DIO Modunda Hibrit Core Olustur (The Shield Merge)
+      - name: DIO Modunda Hibrit Core Olustur
         run: |
-          # MUHAMMED: Iste sihirli dokunus! 
-          # PIO QIO derlese bile, biz merge sirasinda flash_mode'u DIO yapiyoruz.
-          # Bu sayede bootloader header'i degisir ve ets_loader hatasi cozulur.
+          # MUHAMMED: Bootloader ve Firmware'i DIO modunda birleştiriyoruz.
           python -m esptool --chip esp32s3 merge_bin \
             -o .pio/build/esp32-s3-devkitc-1/kynexos_core_dio.bin \
             --flash_mode dio \
@@ -62,12 +60,12 @@ jobs:
             0x0 .pio/build/esp32-s3-devkitc-1/bootloader.bin \
             0x10000 .pio/build/esp32-s3-devkitc-1/firmware.bin
 
-      - name: Sovereign DIO Pack Yukle
+      - name: Sovereign Ultimate Pack Yukle
         uses: actions/upload-artifact@v4
         with:
-          name: KynexOs_DIO_Pack_v230
+          name: KynexOs_Ultimate_Pack_v230
           path: |
             .pio/build/*/kynexos_core_dio.bin
             .pio/build/*/partitions.bin
-            .pio/build/*/fatfs.bin
+            .pio/build/*/ffat.bin
           compression-level: 9
