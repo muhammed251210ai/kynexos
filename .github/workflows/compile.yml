@@ -1,8 +1,8 @@
 # **************************************************************************
-# * Kynex Sovereign - KynexOs Mainframe CI v230.0
+# * Kynex Sovereign - KynexOs Factory Merger CI v230.5
 # * Geliştirici: Muhammed (Kynex)
-# * Görev: KynexOs firmware'i ve Data (FFat) imajını tek hamlede derler.
-# * Hata Düzeltme: "mkffat: not found" Symlink Hack (Köprü) Geri Getirildi.
+# * Görev: Tüm binary parçalarını (Boot+Part+App) TEK DOSYA haline getirir.
+# * Hata Düzeltme: mkffat Symlink Hack + Esptool Merge Binary
 # * Talimat: Asla satır silmeden, tam ve tek parça kod blokları içinde ver.
 # **************************************************************************
 
@@ -11,7 +11,6 @@ name: KynexOs Sovereign Build v230.0
 on: [push]
 
 env:
-  # MUHAMMED: GitHub Actions 2026 standartlarına uygun Node.js 24 ayarı
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
@@ -34,39 +33,38 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: PlatformIO Yukle ve Arac Onarimi (Symlink Hack)
+      - name: PlatformIO Yukle ve Arac Onarimi
         run: |
           python -m pip install --upgrade pip
-          pip install --upgrade platformio
-          # Aracın doğru ve uyumlu sürümünü global olarak indiriyoruz
+          pip install --upgrade platformio esptool
           pio pkg install --global --tool "platformio/tool-mkfatfs@~2.0.0"
           
-          # MUHAMMED: Senin o harika "Symlink Hack" taktiğini uyguluyoruz!
-          # PlatformIO "mkffat" arıyor, biz ona "mkfatfs" aracını "mkffat" maskesiyle veriyoruz.
           MKFATFS_PATH=$(find ~/.platformio/packages/tool-mkfatfs -name "mkfatfs" | head -n 1)
-          if [ -z "$MKFATFS_PATH" ]; then
-            echo "HATA: mkfatfs aracı bulunamadı!"
-            exit 1
-          fi
           sudo ln -sf "$MKFATFS_PATH" /usr/bin/mkffat
           echo "Arac koprusu kuruldu: $MKFATFS_PATH -> /usr/bin/mkffat"
 
       - name: KynexOs ve Storage Derle
         run: |
-          # MUHAMMED: Once firmware, sonra data klasorunden FFat imajı üret!
-          # partitions.csv dosyasındaki 'storage' etiketine göre imajı mühürler.
           pio run
           pio run --target buildfs
 
-      - name: KynexOs Ultimate Pack Yukle
+      - name: Binary Dosyalarini Tek Parca Haline Getir (Merge)
+        run: |
+          # MUHAMMED: İşte o sihirli an! 0x0, 0x8000 ve 0x10000 adreslerini birleştiriyoruz.
+          python -m esptool --chip esp32s3 merge_bin \
+            -o .pio/build/esp32-s3-devkitc-1/kynexos_factory_v230.bin \
+            --flash_mode qio \
+            --flash_size 16MB \
+            0x0 .pio/build/esp32-s3-devkitc-1/bootloader.bin \
+            0x8000 .pio/build/esp32-s3-devkitc-1/partitions.bin \
+            0x10000 .pio/build/esp32-s3-devkitc-1/firmware.bin
+
+      - name: KynexOs Sovereign Pack Yukle
         uses: actions/upload-artifact@v4
         with:
-          name: KynexOs_Final_Package_v230
+          name: KynexOs_Single_Pack_v230
           path: |
-            .pio/build/*/firmware.bin
-            .pio/build/*/partitions.bin
-            .pio/build/*/bootloader.bin
-            .pio/build/*/spiffs.bin
+            .pio/build/*/kynexos_factory_v230.bin
             .pio/build/*/littlefs.bin
             .pio/build/*/fatfs.bin
           compression-level: 9
