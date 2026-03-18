@@ -1,6 +1,6 @@
-/* * KynexOs v192.0 - Win10 Sovereign Anti-Rollback Edition
+/* * KynexOs v192.1 - Win10 Sovereign Anti-Rollback Edition
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Anti-Rollback Protection, Windows 10 UI, Web FM, 0x800000 Offset
+ * Özellikler: PIO Offset Fix, Anti-Rollback Protection, Windows 10 UI
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -119,7 +119,7 @@ void switchToRetroGo() {
 
 void setup() {
     // MUHAMMED FIX: SISTEM AÇILIR AÇILMAZ ROLLBACK'İ İPTAL ET!
-    // Bu sayede Retro-Go'ya geri dönmesi fiziksel olarak yasaklanır.
+    // KynexOS açıldığı an, Retro-Go'ya geri dönüş biletini yakar!
     esp_ota_mark_app_valid_cancel_rollback();
 
     pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, HIGH);
@@ -131,6 +131,8 @@ void setup() {
 
     if(!FFat.begin(true, "/ffat", 10, "storage")) {
         tft.fillScreen(ILI9341_BLUE);
+        tft.setCursor(10,10);
+        tft.setTextColor(ILI9341_WHITE);
         tft.print("BSOD: Storage Error!");
     }
 
