@@ -1,8 +1,8 @@
 # **************************************************************************
-# * Kynex Sovereign - Sovereign Wallpaper & DIO CI v230.8
+# * Kynex Sovereign - KynexOs Source Redirect CI v230.10
 # * Geliştirici: Muhammed (Kynex)
-# * Görev: KynexOs (DIO) + FFat Storage (Wallpaper) Derleme ve Paketleme.
-# * Hata Düzeltme: mkffat Symlink Hack + Esptool Forced DIO Merge
+# * Görev: Wallpaper'ı src/ klasöründen alır ve FFat imajına mühürler.
+# * Hata Düzeltme: mkffat Symlink Hack + Source Path Redirect
 # * Talimat: Asla satır silmeden, tam ve tek parça kod blokları içinde ver.
 # **************************************************************************
 
@@ -43,15 +43,24 @@ jobs:
           sudo ln -sf "$MKFATFS_PATH" /usr/bin/mkffat
           echo "Arac koprusu kuruldu: $MKFATFS_PATH -> /usr/bin/mkffat"
 
-      - name: KynexOs ve FFat Storage Derle
+      - name: KynexOs ve FFat Storage Hazirligi
         run: |
-          # MUHAMMED: Once firmware, sonra data/ klasorundeki wallpaper'i imaj yapar.
+          # MUHAMMED: Dosyayı src/ altından alıp imaj klasörüne taşıyoruz
+          mkdir -p data
+          if [ -f "src/wallpaper.jpg" ]; then
+            cp src/wallpaper.jpg data/wallpaper.jpg
+            echo "Wallpaper src/ klasorunden kopyalandi."
+          else
+            echo "HATA: src/wallpaper.jpg bulunamadi!"
+            exit 1
+          fi
+          
+          # Firmware ve Dosya Sistemi Derlemesi
           pio run
           pio run --target buildfs
 
       - name: DIO Modunda Hibrit Core Olustur
         run: |
-          # MUHAMMED: Bootloader ve Firmware'i DIO modunda birleştiriyoruz.
           python -m esptool --chip esp32s3 merge_bin \
             -o .pio/build/esp32-s3-devkitc-1/kynexos_core_dio.bin \
             --flash_mode dio \
