@@ -1,8 +1,8 @@
 # **************************************************************************
-# * Kynex Sovereign - KynexOs Factory Merger CI v230.5
+# * Kynex Sovereign - KynexOs Hybrid Core CI v230.6
 # * Geliştirici: Muhammed (Kynex)
-# * Görev: Tüm binary parçalarını (Boot+Part+App) TEK DOSYA haline getirir.
-# * Hata Düzeltme: mkffat Symlink Hack + Esptool Merge Binary
+# * Görev: Bootloader + Firmware BİRLEŞİK, Partitions AYRI paketler.
+# * Hata Düzeltme: mkffat Symlink Hack + Esptool Hybrid Merge
 # * Talimat: Asla satır silmeden, tam ve tek parça kod blokları içinde ver.
 # **************************************************************************
 
@@ -48,23 +48,23 @@ jobs:
           pio run
           pio run --target buildfs
 
-      - name: Binary Dosyalarini Tek Parca Haline Getir (Merge)
+      - name: Hibrit Core Olustur (Boot + App)
         run: |
-          # MUHAMMED: İşte o sihirli an! 0x0, 0x8000 ve 0x10000 adreslerini birleştiriyoruz.
+          # MUHAMMED: Bootloader (0x0) ve Firmware (0x10000) birlesiyor.
+          # Partition Table (0x8000) bu dosyanin icinde bosluk (0xFF) olarak kalacak.
           python -m esptool --chip esp32s3 merge_bin \
-            -o .pio/build/esp32-s3-devkitc-1/kynexos_factory_v230.bin \
+            -o .pio/build/esp32-s3-devkitc-1/kynexos_core_hybrid.bin \
             --flash_mode qio \
             --flash_size 16MB \
             0x0 .pio/build/esp32-s3-devkitc-1/bootloader.bin \
-            0x8000 .pio/build/esp32-s3-devkitc-1/partitions.bin \
             0x10000 .pio/build/esp32-s3-devkitc-1/firmware.bin
 
-      - name: KynexOs Sovereign Pack Yukle
+      - name: Sovereign Hybrid Pack Yukle
         uses: actions/upload-artifact@v4
         with:
-          name: KynexOs_Single_Pack_v230
+          name: KynexOs_Hybrid_Pack_v230
           path: |
-            .pio/build/*/kynexos_factory_v230.bin
-            .pio/build/*/littlefs.bin
+            .pio/build/*/kynexos_core_hybrid.bin
+            .pio/build/*/partitions.bin
             .pio/build/*/fatfs.bin
           compression-level: 9
