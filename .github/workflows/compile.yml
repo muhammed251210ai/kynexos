@@ -1,8 +1,8 @@
 # **************************************************************************
-# * Kynex Sovereign - KynexOs Hybrid Core CI v230.6
+# * Kynex Sovereign - KynexOs DIO Shield CI v230.7
 # * Geliştirici: Muhammed (Kynex)
-# * Görev: Bootloader + Firmware BİRLEŞİK, Partitions AYRI paketler.
-# * Hata Düzeltme: mkffat Symlink Hack + Esptool Hybrid Merge
+# * Görev: Tüm sistemi DIO (Dual I/O) modunda birleştirir.
+# * Hata Düzeltme: ets_loader Boot Loop + Linker ELF Not Found FIX
 # * Talimat: Asla satır silmeden, tam ve tek parça kod blokları içinde ver.
 # **************************************************************************
 
@@ -45,26 +45,29 @@ jobs:
 
       - name: KynexOs ve Storage Derle
         run: |
+          # MUHAMMED: Derleme sirasinda hata almamak icin PIO'yu QIO birakiyoruz
           pio run
           pio run --target buildfs
 
-      - name: Hibrit Core Olustur (Boot + App)
+      - name: DIO Modunda Hibrit Core Olustur (The Shield Merge)
         run: |
-          # MUHAMMED: Bootloader (0x0) ve Firmware (0x10000) birlesiyor.
-          # Partition Table (0x8000) bu dosyanin icinde bosluk (0xFF) olarak kalacak.
+          # MUHAMMED: Iste sihirli dokunus! 
+          # PIO QIO derlese bile, biz merge sirasinda flash_mode'u DIO yapiyoruz.
+          # Bu sayede bootloader header'i degisir ve ets_loader hatasi cozulur.
           python -m esptool --chip esp32s3 merge_bin \
-            -o .pio/build/esp32-s3-devkitc-1/kynexos_core_hybrid.bin \
-            --flash_mode qio \
+            -o .pio/build/esp32-s3-devkitc-1/kynexos_core_dio.bin \
+            --flash_mode dio \
             --flash_size 16MB \
+            --flash_freq 40m \
             0x0 .pio/build/esp32-s3-devkitc-1/bootloader.bin \
             0x10000 .pio/build/esp32-s3-devkitc-1/firmware.bin
 
-      - name: Sovereign Hybrid Pack Yukle
+      - name: Sovereign DIO Pack Yukle
         uses: actions/upload-artifact@v4
         with:
-          name: KynexOs_Hybrid_Pack_v230
+          name: KynexOs_DIO_Pack_v230
           path: |
-            .pio/build/*/kynexos_core_hybrid.bin
+            .pio/build/*/kynexos_core_dio.bin
             .pio/build/*/partitions.bin
             .pio/build/*/fatfs.bin
           compression-level: 9
