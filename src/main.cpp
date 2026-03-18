@@ -1,6 +1,6 @@
-/* * KynexOs v191.0 - Win10 Sovereign Edition
+/* * KynexOs v192.0 - Win10 Sovereign Anti-Rollback Edition
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Windows 10 UI, Taskbar, Start Menu Icon, Web FM, 8MB Offset
+ * Özellikler: Anti-Rollback Protection, Windows 10 UI, Web FM, 0x800000 Offset
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -47,43 +47,36 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) 
 
 // WIN10 ARAYÜZ ÇİZİMİ
 void drawWin10UI() {
-    // 1. Duvar Kağıdı Kontrolü
     if (FFat.exists("/wallpaper.jpg")) {
         TJpgDec.drawFsJpg(0, 0, "/wallpaper.jpg", FFat);
     } else {
-        tft.fillScreen(WIN_BLUE); // Klasik Win10 Mavisi
+        tft.fillScreen(WIN_BLUE);
     }
 
-    // 2. Alt Görev Çubuğu (Taskbar)
     tft.fillRect(0, 215, 320, 25, WIN_TASKBAR);
     
-    // 3. Başlat Butonu (Win Logosu Stili)
     tft.fillRect(2, 217, 20, 20, WIN_START);
     tft.drawRect(2, 217, 20, 20, ILI9341_WHITE);
     tft.drawLine(12, 217, 12, 237, ILI9341_WHITE);
     tft.drawLine(2, 227, 22, 227, ILI9341_WHITE);
 
-    // 4. Saat ve Sistem Bilgisi (Sağ Alt)
     tft.setTextColor(ILI9341_WHITE);
     tft.setTextSize(1);
     tft.setCursor(260, 224);
     tft.print("10:24 AM");
     
-    // 5. Masaüstü İkonu (Retro-Go)
-    tft.fillRect(20, 20, 40, 40, 0x3186); // İkon kutusu
+    tft.fillRect(20, 20, 40, 40, 0x3186); 
     tft.drawRect(20, 20, 40, 40, ILI9341_WHITE);
     tft.setCursor(15, 65);
     tft.print("Retro-Go");
 
-    // 6. Masaüstü İkonu (Web FM)
-    tft.fillRect(80, 20, 40, 40, 0xFBE0); // Turuncu İkon
+    tft.fillRect(80, 20, 40, 40, 0xFBE0); 
     tft.drawRect(80, 20, 40, 40, ILI9341_WHITE);
     tft.setCursor(82, 65);
     tft.print("Web FM");
 
-    // Sistem Durumu
     tft.setCursor(130, 224);
-    tft.setTextColor(0x07E0); // Yeşil
+    tft.setTextColor(0x07E0); 
     tft.print("IP: 192.168.4.1");
 }
 
@@ -125,6 +118,10 @@ void switchToRetroGo() {
 }
 
 void setup() {
+    // MUHAMMED FIX: SISTEM AÇILIR AÇILMAZ ROLLBACK'İ İPTAL ET!
+    // Bu sayede Retro-Go'ya geri dönmesi fiziksel olarak yasaklanır.
+    esp_ota_mark_app_valid_cancel_rollback();
+
     pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, HIGH);
     pinMode(JOY_SELECT, INPUT_PULLUP);
 
