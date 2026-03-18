@@ -1,6 +1,6 @@
-/* * KynexOs v230.9 - Vision Fix Edition
+/* * KynexOs v230.11 - Embedded Vision OS
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Enhanced FFat Mount, JPG Error Feedback, Win10 UI
+ * Özellikler: No-FS Wallpaper, RAM-Optimized JPG, Win10 UI
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -11,11 +11,12 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <WebServer.h>
-#include <FS.h>
-#include <FFat.h>
 #include <TJpg_Decoder.h>
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
+
+// MUHAMMED: GitHub tarafından oluşturulan resim verisi buraya dahil ediliyor
+#include "wallpaper_data.h"
 
 #define TFT_BL 1
 #define TFT_CS 10
@@ -31,7 +32,6 @@
 
 Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
 WebServer server(80);
-File fsUploadFile;
 
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
     if (y >= tft.height()) return false;
@@ -40,31 +40,23 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) 
 }
 
 void drawWin10UI() {
-    tft.fillScreen(WIN_BLUE); // Önce arka planı temizle
-    
-    // MUHAMMED: Resim kontrolü ve hata bildirimi
-    if (FFat.exists("/wallpaper.jpg")) {
-        TJpgDec.drawFsJpg(0, 0, "/wallpaper.jpg", FFat);
-    } else {
-        tft.setCursor(10, 100);
-        tft.setTextColor(ILI9341_YELLOW);
-        tft.print("HATA: wallpaper.jpg BULUNAMADI!");
-        tft.setCursor(10, 120);
-        tft.print("Lutfen 0xC00000 adresini kontrol et.");
-    }
+    // MUHAMMED: Artık FFat.exists yok! Resim doğrudan hafızadan (PROGMEM) çiziliyor.
+    TJpgDec.drawJpg(0, 0, wallpaper_jpg, sizeof(wallpaper_jpg));
 
-    // Görev Çubuğu ve İkonlar
+    // Görev Çubuğu
     tft.fillRect(0, 215, 320, 25, WIN_TASKBAR);
     tft.fillRect(2, 217, 20, 20, WIN_START);
     tft.drawRect(2, 217, 20, 20, ILI9341_WHITE);
     tft.drawLine(12, 217, 12, 237, ILI9341_WHITE);
     tft.drawLine(2, 227, 22, 227, ILI9341_WHITE);
 
+    // Saat ve Bilgi
     tft.setTextColor(ILI9341_WHITE);
     tft.setTextSize(1);
     tft.setCursor(260, 224);
     tft.print("10:24 AM");
     
+    // Uygulama İkonu
     tft.fillRect(20, 20, 40, 40, 0x3186); 
     tft.drawRect(20, 20, 40, 40, ILI9341_WHITE);
     tft.setCursor(15, 65);
@@ -75,35 +67,10 @@ void drawWin10UI() {
     tft.print("IP: 192.168.4.1");
 }
 
-void handleWebRoot() {
-    String h = "<html><body style='background:#1e1e1e;color:white;'><h1>Sovereign Explorer</h1>";
-    File root = FFat.open("/");
-    File file = root.openNextFile();
-    while(file) {
-        h += "<div>- " + String(file.name()) + " (" + String(file.size()) + " bytes)</div>";
-        file = root.openNextFile();
-    }
-    h += "<hr><form action='/upload' method='POST' enctype='multipart/form-data'><input type='file' name='u'><input type='submit' value='Upload'></form></body></html>";
-    server.send(200, "text/html", h);
-}
-
-void handleFileUpload() {
-    HTTPUpload& upload = server.upload();
-    if(upload.status == UPLOAD_FILE_START){
-        fsUploadFile = FFat.open("/" + upload.filename, FILE_WRITE);
-    } else if(upload.status == UPLOAD_FILE_WRITE && fsUploadFile){
-        fsUploadFile.write(upload.buf, upload.currentSize);
-    } else if(upload.status == UPLOAD_FILE_END && fsUploadFile){
-        fsUploadFile.close();
-        ESP.restart();
-    }
-}
-
 void switchToRetroGo() {
     tft.fillScreen(ILI9341_BLACK);
     tft.setCursor(60, 110);
     tft.setTextColor(ILI9341_WHITE);
-    tft.setTextSize(2);
     tft.print("OYUNLAR ACILIYOR...");
     const esp_partition_t* p = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
     if (p) { esp_ota_set_boot_partition(p); delay(100); ESP.restart(); }
@@ -116,22 +83,16 @@ void setup() {
     SPI.begin(TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS);
     tft.begin();
     tft.setRotation(1);
-    
-    // MUHAMMED: Storage mount denemesi - Formatlamayı KAPATTIK (false)
-    // Böylece imajımız silinmez!
-    if (!FFat.begin(false, "/ffat", 10, "storage")) {
-        tft.fillScreen(ILI9341_RED);
-        tft.setCursor(20, 100);
-        tft.print("MOUNT HATASI: storage bulunamadi!");
-    }
 
     TJpgDec.setJpgScale(1);
     TJpgDec.setCallback(tft_output);
+    
     drawWin10UI();
 
     WiFi.softAP("Kynex-Sovereign", "*muhammed*");
-    server.on("/", handleWebRoot);
-    server.on("/upload", HTTP_POST, [](){ server.send(303); }, handleFileUpload);
+    server.on("/", []() {
+        server.send(200, "text/html", "<h1>Sovereign Embedded Mode</h1><p>Wallpaper is now hardcoded!</p>");
+    });
     server.begin();
 }
 
