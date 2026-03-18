@@ -44,12 +44,17 @@ jobs:
           # MUHAMMED: Senin o harika "Symlink Hack" taktiğini uyguluyoruz!
           # PlatformIO "mkffat" arıyor, biz ona "mkfatfs" aracını "mkffat" maskesiyle veriyoruz.
           MKFATFS_PATH=$(find ~/.platformio/packages/tool-mkfatfs -name "mkfatfs" | head -n 1)
-          sudo ln -s "$MKFATFS_PATH" /usr/bin/mkffat
+          if [ -z "$MKFATFS_PATH" ]; then
+            echo "HATA: mkfatfs aracı bulunamadı!"
+            exit 1
+          fi
+          sudo ln -sf "$MKFATFS_PATH" /usr/bin/mkffat
           echo "Arac koprusu kuruldu: $MKFATFS_PATH -> /usr/bin/mkffat"
 
       - name: KynexOs ve Storage Derle
         run: |
           # MUHAMMED: Once firmware, sonra data klasorunden FFat imajı üret!
+          # partitions.csv dosyasındaki 'storage' etiketine göre imajı mühürler.
           pio run
           pio run --target buildfs
 
@@ -61,5 +66,7 @@ jobs:
             .pio/build/*/firmware.bin
             .pio/build/*/partitions.bin
             .pio/build/*/bootloader.bin
-            .pio/build/*/*.bin 
+            .pio/build/*/spiffs.bin
+            .pio/build/*/littlefs.bin
+            .pio/build/*/fatfs.bin
           compression-level: 9
