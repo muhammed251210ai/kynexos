@@ -1,6 +1,7 @@
+# Sovereign Master Map - Ordered PIO Edition
 nvs,      data, nvs,     0x9000,   0x4000,
 otadata,  data, ota,     0xd000,   0x2000,
 phy_init, data, phy,     0xf000,   0x1000,
-kynexos,  app,  ota_0,   0x800000, 0x400000,
 retrogo,  app,  ota_1,   0x10000,  0x7F0000,
+kynexos,  app,  ota_0,   0x800000, 0x400000,
 storage,  data, fat,     0xC00000, 0x400000,
