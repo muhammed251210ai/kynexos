@@ -1,7 +1,7 @@
-/* * Sovereign Wallpaper Engine - Win10 Hero Edition
+/* * Sovereign Wallpaper Engine - Win10 Hero Pure GFX
  * Geliştirici: Muhammed (Kynex)
- * Görev: Windows 10 Duvar Kağıdını Saf Kodla Çizer.
- * Avantaj: 0 KB Bellek Kullanımı, %100 Stabilite.
+ * Görev: Windows 10 Temasını Saf Kodla Çizer (Resim Dosyası Gerektirmez).
+ * Avantaj: Sıfır RAM hatası, Maksimum Açılış Hızı.
  */
 
 #ifndef WALLPAPER_H
@@ -9,37 +9,35 @@
 
 #include <Adafruit_GFX.h>
 
-// Win10 Renk Paleti
-#define WIN10_DARK_BLUE   0x0011
-#define WIN10_MEDIUM_BLUE 0x0019
-#define WIN10_LIGHT_BLUE  0x5DFF
-#define WIN10_GLOW        0xADFF
+// Win10 Sovereign Renk Paleti
+#define W10_DEEP_BLUE    0x0011
+#define W10_DARK_BLUE    0x000D
+#define W10_LIGHT_BLUE   0x5DFF
+#define W10_PANE_GLOW    0xADFF
 
-void drawSovereignWallpaper(Adafruit_GFX *tft) {
-    // 1. Gradyan Arka Plan Çizimi (Yukarıdan Aşağıya Derinlik)
+void drawWin10Background(Adafruit_GFX *tft) {
+    // 1. Derinlik Efekti: Yukarıdan aşağıya basit gradyan simülasyonu
     for (int i = 0; i < 240; i++) {
-        // Basit bir renk geçişi simülasyonu
-        uint16_t color = (i < 120) ? WIN10_DARK_BLUE : WIN10_MEDIUM_BLUE;
-        tft->drawFastHLine(0, i, 320, color);
+        uint16_t line_color = (i < 100) ? W10_DARK_BLUE : W10_DEEP_BLUE;
+        tft->drawFastHLine(0, i, 320, line_color);
     }
 
-    // 2. Windows "Hero" Işık Hüzmesi (Arka Plan Aydınlatması)
-    for (int r = 0; r < 80; r++) {
-        tft->drawCircle(160, 100, r, 0x0015); // Hafif bir parlama efekti
-    }
-
-    // 3. İkonik Windows Penceresi (Perspektifli Çizim)
-    // Sol Kanat
-    tft->fillRoundRect(120, 75, 35, 30, 2, WIN10_LIGHT_BLUE);
-    tft->fillRoundRect(120, 110, 35, 30, 2, WIN10_LIGHT_BLUE);
+    // 2. Windows "Hero" Penceresi (Işık ve Perspektif)
+    // Sol Üst Parça
+    tft->fillRoundRect(125, 75, 30, 25, 1, W10_LIGHT_BLUE);
+    // Sol Alt Parça
+    tft->fillRoundRect(125, 105, 30, 25, 1, W10_LIGHT_BLUE);
     
-    // Sağ Kanat (Daha Büyük ve Aydınlık)
-    tft->fillRoundRect(160, 70, 45, 35, 2, WIN10_GLOW);
-    tft->fillRoundRect(160, 110, 45, 35, 2, WIN10_GLOW);
+    // Sağ Üst Parça (Daha Parlak)
+    tft->fillRoundRect(160, 70, 40, 30, 1, W10_PANE_GLOW);
+    // Sağ Alt Parça (Daha Parlak)
+    tft->fillRoundRect(160, 105, 40, 30, 1, W10_PANE_GLOW);
 
-    // Pencere Çizgileri (Haç işareti)
-    tft->drawFastVLine(157, 70, 75, WIN10_DARK_BLUE); // Dikey boşluk
-    tft->drawFastHLine(120, 107, 85, WIN10_DARK_BLUE); // Yatay boşluk
+    // 3. Işık Hüzmesi Efekti (Pencere Arasındaki Boşluklar)
+    tft->drawFastVLine(157, 70, 65, W10_DARK_BLUE);
+    tft->drawFastHLine(125, 102, 75, W10_DARK_BLUE);
+    
+    Serial.println("[WALLPAPER] Win10 Hero Render Edildi.");
 }
 
 #endif
