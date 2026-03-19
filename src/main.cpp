@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.33 - The Absolute Fix
+ * KynexOs Sovereign Build v230.34 - The Architect's Fix
  * Geliştirici: Muhammed (Kynex)
- * Görev: 8MB PSRAM Boot, 40MHz SPI, Aligned JPG Decoding
+ * Görev: Missing Declarations Fix, 8MB PSRAM Boot, Aligned JPG
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -11,6 +11,8 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
 #include <SPI.h>
+#include <WiFi.h>        // MUHAMMED: WiFi kutuphanesi eklendi
+#include <WebServer.h>   // MUHAMMED: Server kutuphanesi eklendi
 #include <TJpg_Decoder.h>
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
@@ -31,6 +33,9 @@
 
 Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
 
+// MUHAMMED: Önceki sürümde unuttuğum o kritik satır eklendi!
+WebServer server(80);
+
 unsigned long lock_timer = 0;
 bool psram_ok = false;
 
@@ -46,7 +51,7 @@ void setup() {
     Serial.begin(115200);
     delay(2000);
     Serial.println("\n\n========================================");
-    Serial.println("KYNEX-OS V230.33 - THE ABSOLUTE FIX");
+    Serial.println("KYNEX-OS V230.34 - THE ARCHITECT'S FIX");
     Serial.println("========================================");
 
     if (psramInit()) {
@@ -84,7 +89,7 @@ void setup() {
         Serial.println("[HATA] Wallpaper array okunamadi veya eksik!");
         tft.setTextColor(0xF800);
         tft.setCursor(20, 100);
-        tft.print("HATA: HEX VERISI BOZUK!");
+        tft.print("HATA: HEX VERISI BOZUK VEYA EKSIK!");
     }
 
     tft.fillRect(0, 215, 320, 25, 0x10A2);
@@ -94,7 +99,7 @@ void setup() {
     tft.setTextColor(0xFFFF);
     tft.setTextSize(1);
     tft.setCursor(275, 224);
-    tft.print("23:15");
+    tft.print("23:45");
     
     tft.setCursor(60, 224);
     tft.setTextColor(0x07E0);
