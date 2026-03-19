@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.28 - The Final Stability
+ * KynexOs Sovereign Build v230.29 - The Hero Legacy
  * Geliştirici: Muhammed (Kynex)
- * Görev: Pin Sync, 40MHz Speed, Ghost Trigger Shield, Pure GFX
+ * Görev: Pin Sync, 40MHz Speed, Ghost Trigger Shield, Pure GFX Hero Wallpaper
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -17,7 +17,7 @@
 #include "esp_partition.h"
 #include "esp_task_wdt.h"
 
-// MUHAMMED: Resim dosyasını bırakıp saf GFX'e geçtik
+// MUHAMMED: Yeni saf GFX Hero Legacy motorunu dahil ettik
 #include "wallpaper.h"
 
 // V325 DONANIM HARİTASI
@@ -36,45 +36,47 @@ WebServer server(80);
 unsigned long boot_lock_timer = 0;
 bool gate_unlocked = false;
 
-void drawSovereignUI() {
-    // Arka Planı Çiz
-    drawWin10Background(&tft);
+// UI Arayüz Elemanları (Gradyanın Üzerine Çizilir)
+void drawSovereignUIElements() {
+    Serial.println("[GUI] Gorev Cubugu ve Ikonlar Ciziliyor...");
     
-    // Görev Çubuğu
+    // Alt Görev Çubuğu
     tft.fillRect(0, 215, 320, 25, 0x10A2);
     
-    // Başlat Logosu
+    // Windows Başlat Logosu (Görev Çubuğunda)
     tft.fillRect(2, 217, 20, 20, 0x03FF);
     tft.drawRect(2, 217, 20, 20, ILI9341_WHITE);
     
-    // Saat ve Durum
+    // Saat Bilgisi
     tft.setTextColor(ILI9341_WHITE);
     tft.setTextSize(1);
-    tft.setCursor(270, 224);
-    tft.print("21:40"); 
+    tft.setCursor(275, 224);
+    tft.print("21:28"); 
     
+    // Sistem Durum Yazısı
     tft.setCursor(100, 224);
-    tft.setTextColor(0x07E0); 
-    tft.print("SOVEREIGN STABLE");
+    tft.setTextColor(0x07E0); // Yeşil renk
+    tft.print("SOVEREIGN HERO LEGACY");
     
-    // İkon
-    tft.fillRect(20, 20, 40, 40, 0x3186); 
+    // Masaüstü "Oyunlar" İkonu
+    tft.fillRect(20, 20, 40, 40, 0x3186); // Koyu gri ikon alanı
     tft.drawRect(20, 20, 40, 40, ILI9341_WHITE);
     tft.setCursor(15, 65);
     tft.print("OYUNLAR");
+    
+    Serial.println("[GUI] Arayuz Hazir.");
 }
 
 void setup() {
     Serial.begin(115200);
-    delay(3000); // Seri monitörü açman için zaman tanı Muhammed
-    Serial.println("\n\n--- SOVEREIGN STABILITY BOOT ---");
+    delay(3000); 
+    Serial.println("\n\n--- SOVEREIGN HERO LEGACY BOOT ---");
 
     esp_task_wdt_init(30, true);
     esp_ota_mark_app_valid_cancel_rollback();
 
-    pinMode(TFT_BL, OUTPUT);
-    digitalWrite(TFT_BL, HIGH); 
-    pinMode(JOY_SELECT, INPUT_PULLUP); // Donanımsal gürültü koruması
+    pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, HIGH); 
+    pinMode(JOY_SELECT, INPUT_PULLUP);
     
     SPI.begin(TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS);
     tft.begin(40000000); // 40MHz High Speed
@@ -85,21 +87,25 @@ void setup() {
     tft.sendCommand(0xB1, (const uint8_t*)"\x00\x1B", 2);
     tft.sendCommand(0xB6, (const uint8_t*)"\x08\x82\x27", 3);
     
-    drawSovereignUI();
+    // Muhammed, önce orjinal Hero duvar kağıdını derinlemesine çiziyoruz
+    drawSovereignHeroWallpaper(&tft);
+    
+    // Sonra üzerine arayüz elemanlarını yerleştiriyoruz
+    drawSovereignUIElements();
 
     WiFi.softAP("Kynex-Sovereign", "*muhammed*");
     server.begin();
 
     boot_lock_timer = millis();
     gate_unlocked = true;
-    Serial.println("[SYSTEM] Sistem basariyla uyandi.");
+    Serial.println("[SYSTEM] Sistem Stabil ve Kahramanca Ayakta.");
 }
 
 void loop() {
     server.handleClient();
     esp_task_wdt_reset();
 
-    // MUHAMMED: İlk 10 saniye boyunca butonu kör ediyoruz (Ghost Trigger Fix)
+    // 10 saniye tuş koruması (Ghost Trigger Fix)
     if (gate_unlocked && (millis() - boot_lock_timer > 10000)) {
         if (digitalRead(JOY_SELECT) == LOW) {
             delay(500); // Çok güçlü filtre
