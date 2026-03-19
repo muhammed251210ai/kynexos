@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.29 - The Hero Legacy
+ * KynexOs Sovereign Build v230.30 - The True Hero
  * Geliştirici: Muhammed (Kynex)
- * Görev: Pin Sync, 40MHz Speed, Ghost Trigger Shield, Pure GFX Hero Wallpaper
+ * Görev: Pin Sync, 40MHz Speed, Ghost Trigger Shield, True Smooth GFX Hero
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -17,7 +17,7 @@
 #include "esp_partition.h"
 #include "esp_task_wdt.h"
 
-// MUHAMMED: Yeni saf GFX Hero Legacy motorunu dahil ettik
+// MUHAMMED: Hataları giderilmiş True Smooth Gradient motorunu dahil ettik
 #include "wallpaper.h"
 
 // V325 DONANIM HARİTASI
@@ -51,12 +51,12 @@ void drawSovereignUIElements() {
     tft.setTextColor(ILI9341_WHITE);
     tft.setTextSize(1);
     tft.setCursor(275, 224);
-    tft.print("21:28"); 
+    tft.print("22:15"); 
     
     // Sistem Durum Yazısı
     tft.setCursor(100, 224);
     tft.setTextColor(0x07E0); // Yeşil renk
-    tft.print("SOVEREIGN HERO LEGACY");
+    tft.print("SOVEREIGN TRUE HERO");
     
     // Masaüstü "Oyunlar" İkonu
     tft.fillRect(20, 20, 40, 40, 0x3186); // Koyu gri ikon alanı
@@ -70,7 +70,7 @@ void drawSovereignUIElements() {
 void setup() {
     Serial.begin(115200);
     delay(3000); 
-    Serial.println("\n\n--- SOVEREIGN HERO LEGACY BOOT ---");
+    Serial.println("\n\n--- SOVEREIGN TRUE HERO BOOT ---");
 
     esp_task_wdt_init(30, true);
     esp_ota_mark_app_valid_cancel_rollback();
@@ -87,7 +87,7 @@ void setup() {
     tft.sendCommand(0xB1, (const uint8_t*)"\x00\x1B", 2);
     tft.sendCommand(0xB6, (const uint8_t*)"\x08\x82\x27", 3);
     
-    // Muhammed, önce orjinal Hero duvar kağıdını derinlemesine çiziyoruz
+    // Muhammed, önce orjinal Hero duvar kağıdını derin gradyan ile çiziyoruz
     drawSovereignHeroWallpaper(&tft);
     
     // Sonra üzerine arayüz elemanlarını yerleştiriyoruz
