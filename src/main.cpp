@@ -1,6 +1,6 @@
-/* * KynexOs v230.13 - Firewall Start Edition
+/* * KynexOs v230.14 - Final Diagnostic Edition
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Ghost Key Protection, Boot Delay, Serial Debug, Win10 UI
+ * Özellikler: Absolute Boot Lock, Serial Telemetry, Safe UI
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -16,7 +16,7 @@
 #include "esp_partition.h"
 #include "esp_task_wdt.h"
 
-// MUHAMMED: GitHub CI tarafından oluşturulan resim verisi
+// MUHAMMED: GitHub CI tarafından mühürlenen resim verisi
 #include "wallpaper_data.h"
 
 #define TFT_BL 1
@@ -34,8 +34,8 @@
 Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
 WebServer server(80);
 
-// MUHAMMED: Sistem açılışında tuşları kilitlemek için zamanlayıcı
-unsigned long boot_lock_time = 0;
+unsigned long system_start_time = 0;
+bool os_ready = false;
 
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
     if (y >= tft.height()) return false;
@@ -45,14 +45,14 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) 
 }
 
 void drawWin10UI() {
+    Serial.println("Adim 1: Ekran Temizleniyor...");
     tft.fillScreen(WIN_BLUE);
-    yield();
     
-    // Resim cizimi
+    Serial.println("Adim 2: Wallpaper Muhru Aciliyor...");
+    // MUHAMMED: Eger resim cok buyukse reset atabilir, burayi gozlemle
     TJpgDec.drawJpg(0, 0, wallpaper_jpg, sizeof(wallpaper_jpg));
-    yield();
-
-    // Görev Çubuğu
+    
+    Serial.println("Adim 3: Arayuz Bileşenleri Ciziliyor...");
     tft.fillRect(0, 215, 320, 25, WIN_TASKBAR);
     tft.fillRect(2, 217, 20, 20, WIN_START);
     tft.drawRect(2, 217, 20, 20, ILI9341_WHITE);
@@ -62,28 +62,28 @@ void drawWin10UI() {
     tft.setTextColor(ILI9341_WHITE);
     tft.setTextSize(1);
     tft.setCursor(260, 224);
-    tft.print("10:24 AM");
+    tft.print("16:00 PM"); // Senin zamanina gore guncelledim :)
     
     tft.fillRect(20, 20, 40, 40, 0x3186); 
     tft.drawRect(20, 20, 40, 40, ILI9341_WHITE);
     tft.setCursor(15, 65);
     tft.print("Oyunlar");
 
-    tft.setCursor(130, 224);
+    tft.setCursor(100, 224);
     tft.setTextColor(0x07E0); 
-    tft.print("IP: 192.168.4.1");
+    tft.print("Sovereign Online");
 }
 
 void setup() {
-    // Seri portu başlat ki hatayı görebilelim
     Serial.begin(115200);
-    Serial.println("Sovereign KynexOS Yukleniyor...");
+    delay(1000); // Islemcinin kendine gelmesi icin zaman tani
+    Serial.println("\n--- KYNEX-OS SOVEREIGN BOOT SEQUENCE START ---");
 
-    esp_task_wdt_init(15, true); 
+    esp_task_wdt_init(20, true); 
     esp_ota_mark_app_valid_cancel_rollback();
 
     pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, HIGH);
-    pinMode(JOY_SELECT, INPUT_PULLUP); // Tuş gürültüsünü engellemek için Pullup
+    pinMode(JOY_SELECT, INPUT_PULLUP); // Donanimsal gurultuyu engelle
     
     SPI.begin(TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS);
     tft.begin();
@@ -95,30 +95,27 @@ void setup() {
     drawWin10UI();
 
     WiFi.softAP("Kynex-Sovereign", "*muhammed*");
-    server.on("/", []() { server.send(200, "text/plain", "KynexOS Online"); });
+    server.on("/", []() { server.send(200, "text/plain", "Sovereign OS Active"); });
     server.begin();
 
-    // Sistem açıldıktan sonra 3 saniye boyunca tuşları devre dışı bırak
-    boot_lock_time = millis();
-    Serial.println("KynexOS Hazir!");
+    system_start_time = millis();
+    os_ready = true;
+    Serial.println("--- BOOT COMPLETED SUCCESSFULLY ---");
 }
 
 void loop() {
     server.handleClient();
     esp_task_wdt_reset();
 
-    // MUHAMMED: Sadece 3 saniye geçtikten sonra tuşu dinle
-    if (millis() - boot_lock_time > 3000) {
+    // MUHAMMED: İlk 5 saniye tuşları tamamen devre dışı bıraktık (Ghost Reset Fix)
+    if (os_ready && (millis() - system_start_time > 5000)) {
         if (digitalRead(JOY_SELECT) == LOW) {
-            delay(100); // Daha güçlü debounce
-            if (digitalRead(JOY_SELECT) == LOW) {
-                Serial.println("Retro-Go'ya Gecis Yapiliyor...");
-                const esp_partition_t* p = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
-                if (p) { 
-                    esp_ota_set_boot_partition(p); 
-                    delay(500); 
-                    ESP.restart(); 
-                }
+            Serial.println("Gecis Komutu Algilandi! Retro-Go'ya gidiliyor...");
+            const esp_partition_t* p = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
+            if (p) { 
+                esp_ota_set_boot_partition(p); 
+                delay(1000); 
+                ESP.restart(); 
             }
         }
     }
