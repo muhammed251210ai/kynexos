@@ -1,7 +1,8 @@
 # **************************************************************************
-# * Kynex Sovereign - KynexOs Raw Vision CI v230.18
+# * Kynex Sovereign - KynexOs Header Vision CI v230.21
 # * Geliştirici: Muhammed (Kynex)
-# * Görev: src/wallpaper.jpg dosyasını hizalanmış byte dizisine dönüştürür.
+# * Görev: Saf Header (wallpaper.h) tabanlı derleme ve paketleme.
+# * Hata Düzeltme: JPG Hafıza Boğulması ve Hizalama Sorunları Giderildi.
 # * Talimat: Asla satır silmeden, tam ve tek parça kod blokları içinde ver.
 # **************************************************************************
 
@@ -37,33 +38,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade platformio esptool
 
-      - name: Hizalanmiş Resim Muhru (Image-to-Header Aligned)
-        run: |
-          # MUHAMMED: Işlemcinin çökmemesi için veriyi 4-byte hizali (aligned) olarak gömüyoruz.
-          python3 -c "
-          import sys
-          try:
-              with open('src/wallpaper.jpg', 'rb') as f:
-                  data = f.read()
-              with open('src/wallpaper_data.h', 'w') as f:
-                  f.write('#include <pgmspace.h>\n')
-                  f.write('const unsigned char wallpaper_jpg[] PROGMEM __attribute__((aligned(4))) = {\n')
-                  for i in range(0, len(data), 12):
-                      chunk = data[i:i+12]
-                      f.write('  ' + ', '.join([hex(b) for b in chunk]) + ',\n')
-                  f.write('};\n')
-                  f.write('const unsigned int wallpaper_jpg_len = ' + str(len(data)) + ';\n')
-              print('Wallpaper basariyla muhurlendi.')
-          except Exception as e:
-              print('HATA: ' + str(e))
-              sys.exit(1)
-          "
-
       - name: KynexOs Derle
-        run: pio run
+        run: |
+          # MUHAMMED: Artik JPG donusturme yok, dogrudan wallpaper.h kullaniliyor.
+          pio run
 
       - name: DIO Modunda Hibrit Core Olustur
         run: |
+          # MUHAMMED: Bootloader ve Firmware'i DIO modunda birlestiriyoruz.
           python -m esptool --chip esp32s3 merge_bin \
             -o .pio/build/esp32-s3-devkitc-1/kynexos_core_dio.bin \
             --flash_mode dio \
@@ -75,7 +57,7 @@ jobs:
       - name: Sovereign Final Pack Yukle
         uses: actions/upload-artifact@v4
         with:
-          name: KynexOs_Final_v230_18
+          name: KynexOs_Final_v230_21
           path: |
             .pio/build/*/kynexos_core_dio.bin
             .pio/build/*/partitions.bin
