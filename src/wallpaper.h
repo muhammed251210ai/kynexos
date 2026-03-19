@@ -1,7 +1,5 @@
-/* * Sovereign Wallpaper Engine - Win10 Hero Pure GFX
+/* * Sovereign Wallpaper Engine - Win10 Pure GFX v230.23
  * Geliştirici: Muhammed (Kynex)
- * Görev: Windows 10 Temasını Saf Kodla Çizer (Resim Dosyası Gerektirmez).
- * Avantaj: Sıfır RAM hatası, Maksimum Açılış Hızı.
  */
 
 #ifndef WALLPAPER_H
@@ -9,35 +7,22 @@
 
 #include <Adafruit_GFX.h>
 
-// Win10 Sovereign Renk Paleti
-#define W10_DEEP_BLUE    0x0011
-#define W10_DARK_BLUE    0x000D
-#define W10_LIGHT_BLUE   0x5DFF
-#define W10_PANE_GLOW    0xADFF
+#define W10_DARK  0x0011
+#define W10_BLUE  0x0019
+#define W10_LIGHT 0x5DFF
 
 void drawWin10Background(Adafruit_GFX *tft) {
-    // 1. Derinlik Efekti: Yukarıdan aşağıya basit gradyan simülasyonu
+    // Gradyan Arka Plan
     for (int i = 0; i < 240; i++) {
-        uint16_t line_color = (i < 100) ? W10_DARK_BLUE : W10_DEEP_BLUE;
-        tft->drawFastHLine(0, i, 320, line_color);
+        tft->drawFastHLine(0, i, 320, (i < 120) ? W10_DARK : W10_BLUE);
     }
-
-    // 2. Windows "Hero" Penceresi (Işık ve Perspektif)
-    // Sol Üst Parça
-    tft->fillRoundRect(125, 75, 30, 25, 1, W10_LIGHT_BLUE);
-    // Sol Alt Parça
-    tft->fillRoundRect(125, 105, 30, 25, 1, W10_LIGHT_BLUE);
+    // Windows Logosunun basitleştirilmiş hali
+    tft->fillRect(135, 85, 20, 20, W10_LIGHT);
+    tft->fillRect(135, 110, 20, 20, W10_LIGHT);
+    tft->fillRect(160, 80, 25, 25, 0xADFF);
+    tft->fillRect(160, 110, 25, 25, 0xADFF);
     
-    // Sağ Üst Parça (Daha Parlak)
-    tft->fillRoundRect(160, 70, 40, 30, 1, W10_PANE_GLOW);
-    // Sağ Alt Parça (Daha Parlak)
-    tft->fillRoundRect(160, 105, 40, 30, 1, W10_PANE_GLOW);
-
-    // 3. Işık Hüzmesi Efekti (Pencere Arasındaki Boşluklar)
-    tft->drawFastVLine(157, 70, 65, W10_DARK_BLUE);
-    tft->drawFastHLine(125, 102, 75, W10_DARK_BLUE);
-    
-    Serial.println("[WALLPAPER] Win10 Hero Render Edildi.");
+    Serial.println("[GFX] Wallpaper Render Edildi.");
 }
 
 #endif
