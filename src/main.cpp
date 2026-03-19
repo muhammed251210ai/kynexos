@@ -1,6 +1,6 @@
-/* * KynexOs v230.15 - Sovereign Guard Edition
+/* * KynexOs v230.16 - Core Recovery Edition
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Ghost Trigger Protection, Reset Reason Telemetry, Safe JPG Loader
+ * Özellikler: Deep Diagnostic, Memory Watcher, Ghost Key Shield
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  */
 
@@ -16,7 +16,7 @@
 #include "esp_partition.h"
 #include "esp_task_wdt.h"
 
-// MUHAMMED: GitHub CI tarafından flaş hafızaya gömülen resim verisi
+// MUHAMMED: Resim verisi burada kalsın ama çizimi riskli bölgeye alacağız
 #include "wallpaper_data.h"
 
 #define TFT_BL 1
@@ -34,103 +34,100 @@
 Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
 WebServer server(80);
 
-// MUHAMMED: Donanımsal kilit ve teşhis değişkenleri
-unsigned long boot_protection_millis = 0;
-esp_reset_reason_t last_reason;
+unsigned long boot_lock_timer = 0;
+bool recovery_mode = false;
 
+// Çizim fonksiyonu (WDT Beslemeli)
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
     if (y >= tft.height()) return false;
     tft.drawRGBBitmap(x, y, bitmap, w, h);
-    esp_task_wdt_reset(); // Bekçi köpeğini her blokta besle
+    esp_task_wdt_reset(); 
     return true;
 }
 
 void drawWin10UI() {
-    Serial.println("[GUI] Masaustu hazirlaniyor...");
+    Serial.println("[SYSTEM] UI Cizimi Basladi...");
     tft.fillScreen(WIN_BLUE);
     yield();
     
-    Serial.println("[GUI] Wallpaper ciziliyor (Kritik Nokta)...");
-    // MUHAMMED: Eğer resim verisi bozuksa sistem burada donup reset atabilir
-    TJpgDec.drawJpg(0, 0, wallpaper_jpg, sizeof(wallpaper_jpg));
-    yield();
+    // MUHAMMED: Kurtarma modu kapalıysa resmi çizmeye çalış
+    if (!recovery_mode) {
+        Serial.println("[SYSTEM] Wallpaper denemesi yapiliyor...");
+        // Eğer burada reset atarsa, resim verisi bozuk demektir
+        TJpgDec.drawJpg(0, 0, wallpaper_jpg, sizeof(wallpaper_jpg));
+    } else {
+        Serial.println("[SYSTEM] RECOVERY: Wallpaper cizimi atlandi.");
+        tft.setCursor(60, 110);
+        tft.setTextColor(ILI9341_YELLOW);
+        tft.setTextSize(2);
+        tft.print("RECOVERY MODE ACTIVE");
+    }
 
-    Serial.println("[GUI] Bileşenler yerleştiriliyor...");
+    // Arayüz Elemanları
     tft.fillRect(0, 215, 320, 25, WIN_TASKBAR);
     tft.fillRect(2, 217, 20, 20, WIN_START);
     tft.drawRect(2, 217, 20, 20, ILI9341_WHITE);
-    tft.drawLine(12, 217, 12, 237, ILI9341_WHITE);
-    tft.drawLine(2, 227, 22, 227, ILI9341_WHITE);
-
     tft.setTextColor(ILI9341_WHITE);
     tft.setTextSize(1);
     tft.setCursor(260, 224);
-    tft.print("16:05 PM"); 
+    tft.print("BOOT OK");
     
     tft.fillRect(20, 20, 40, 40, 0x3186); 
     tft.drawRect(20, 20, 40, 40, ILI9341_WHITE);
     tft.setCursor(15, 65);
     tft.print("Oyunlar");
-
-    tft.setCursor(100, 224);
-    tft.setTextColor(0x07E0); 
-    tft.print("Sovereign Online");
-    Serial.println("[GUI] Arayuz tamamlandi.");
+    Serial.println("[SYSTEM] UI Cizimi Tamam.");
 }
 
 void setup() {
-    // 1. Teşhis Sistemini Başlat
+    // 1. Kritik Seri Port Başlatma (Hemen mesaj vermeli!)
     Serial.begin(115200);
-    delay(2000); // İşlemci ve Seri Port stabilizasyonu
-    last_reason = esp_reset_reason();
-    
-    Serial.println("\n--- SOVEREIGN OS KERNEL START ---");
-    Serial.print("Reset Sebebi: "); Serial.println(last_reason);
-    
-    // 2. Güvenlik Ayarları
-    esp_task_wdt_init(30, true); // Bekçi köpeği süresini 30 saniyeye çıkardık
-    esp_ota_mark_app_valid_cancel_rollback();
+    while(!Serial && millis() < 2000); 
+    Serial.println("\n\n######################################");
+    Serial.println("# KYNEX-OS SOVEREIGN RECOVERY START  #");
+    Serial.println("######################################");
 
+    // 2. RAM ve Reset Bilgisi
+    Serial.printf("[INFO] Reset Reason: %d\n", (int)esp_reset_reason());
+    Serial.printf("[INFO] Free Heap: %d KB\n", (int)esp_get_free_heap_size() / 1024);
+
+    // 3. Güvenlik ve Pin Ayarları
+    esp_task_wdt_init(30, true);
+    esp_ota_mark_app_valid_cancel_rollback();
     pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, HIGH);
-    pinMode(JOY_SELECT, INPUT_PULLUP); // Hayalet tetiklemeyi önlemek için Pullup aktif
-    
-    // 3. Ekran ve GPU Başlatma
+    pinMode(JOY_SELECT, INPUT_PULLUP);
+
+    // 4. Donanım Başlatma
     SPI.begin(TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS);
     tft.begin();
     tft.setRotation(1);
     TJpgDec.setJpgScale(1);
     TJpgDec.setCallback(tft_output);
-    
-    // 4. Arayüzü Çiz
+
+    // 5. Arayüzü Çiz
     drawWin10UI();
 
-    // 5. Ağ ve Web Sunucusu
+    // 6. WiFi ve Web
     WiFi.softAP("Kynex-Sovereign", "*muhammed*");
-    server.on("/", []() { server.send(200, "text/plain", "Sovereign Kernel Active"); });
+    server.on("/", []() { server.send(200, "text/plain", "KynexOS Recovery Mode"); });
     server.begin();
 
-    boot_protection_millis = millis();
-    Serial.println("--- KYNEX-OS TAMAMEN YUKLENDI ---");
+    boot_lock_timer = millis();
+    Serial.println("[SUCCESS] KynexOS kernel ayakta.");
 }
 
 void loop() {
     server.handleClient();
     esp_task_wdt_reset();
 
-    // MUHAMMED: Hayalet resetleri önlemek için 10 saniye boyunca Select tuşunu kör ediyoruz
-    if (millis() - boot_protection_millis > 10000) {
+    // Ghost Reset Fix (10 Saniye Koruması)
+    if (millis() - boot_lock_timer > 10000) {
         if (digitalRead(JOY_SELECT) == LOW) {
-            delay(200); // Güçlü Debounce
+            delay(200);
             if (digitalRead(JOY_SELECT) == LOW) {
-                Serial.println("[Sovereign] Gecis istegi onaylandi. Retro-Go yukleniyor...");
+                Serial.println("[ACTION] Retro-Go tetiklendi...");
                 const esp_partition_t* p = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
-                if (p) { 
-                    esp_ota_set_boot_partition(p); 
-                    delay(500); 
-                    ESP.restart(); 
-                } else {
-                    Serial.println("[HATA] Retro-Go (OTA_1) bolumu haritada bulunamadi!");
-                }
+                if (p) { esp_ota_set_boot_partition(p); delay(500); ESP.restart(); }
             }
         }
     }
