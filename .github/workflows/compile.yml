@@ -1,8 +1,7 @@
 # **************************************************************************
-# * Kynex Sovereign - KynexOs Embedded Image CI v230.11
+# * Kynex Sovereign - KynexOs Raw Vision CI v230.18
 # * Geliştirici: Muhammed (Kynex)
-# * Görev: Wallpaper'ı koda gömer, storage dosyasına ihtiyacı bitirir.
-# * Hata Düzeltme: mkffat Symlink Hack + Image-to-Header Converter
+# * Görev: src/wallpaper.jpg dosyasını hizalanmış byte dizisine dönüştürür.
 # * Talimat: Asla satır silmeden, tam ve tek parça kod blokları içinde ver.
 # **************************************************************************
 
@@ -38,17 +37,30 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade platformio esptool
 
-      - name: Resmi Koda Gom (Image-to-Header)
+      - name: Hizalanmiş Resim Muhru (Image-to-Header Aligned)
         run: |
-          # MUHAMMED: İşte o büyük dahi hamlesi! 
-          # src/wallpaper.jpg dosyasını okuyup wallpaper_data.h olarak koda mühürlüyoruz.
-          python3 -c "import sys; data = open('src/wallpaper.jpg', 'rb').read(); print('const unsigned char wallpaper_jpg[] PROGMEM = {', end=''); print(','.join([hex(b) for b in data]), end=''); print('};');" > src/wallpaper_data.h
-          echo "Wallpaper koda muhurlendi: src/wallpaper_data.h"
+          # MUHAMMED: Işlemcinin çökmemesi için veriyi 4-byte hizali (aligned) olarak gömüyoruz.
+          python3 -c "
+          import sys
+          try:
+              with open('src/wallpaper.jpg', 'rb') as f:
+                  data = f.read()
+              with open('src/wallpaper_data.h', 'w') as f:
+                  f.write('#include <pgmspace.h>\n')
+                  f.write('const unsigned char wallpaper_jpg[] PROGMEM __attribute__((aligned(4))) = {\n')
+                  for i in range(0, len(data), 12):
+                      chunk = data[i:i+12]
+                      f.write('  ' + ', '.join([hex(b) for b in chunk]) + ',\n')
+                  f.write('};\n')
+                  f.write('const unsigned int wallpaper_jpg_len = ' + str(len(data)) + ';\n')
+              print('Wallpaper basariyla muhurlendi.')
+          except Exception as e:
+              print('HATA: ' + str(e))
+              sys.exit(1)
+          "
 
       - name: KynexOs Derle
-        run: |
-          # Artık buildfs (storage) derlememize gerek yok!
-          pio run
+        run: pio run
 
       - name: DIO Modunda Hibrit Core Olustur
         run: |
@@ -60,10 +72,10 @@ jobs:
             0x0 .pio/build/esp32-s3-devkitc-1/bootloader.bin \
             0x10000 .pio/build/esp32-s3-devkitc-1/firmware.bin
 
-      - name: Sovereign Ultimate Embedded Pack Yukle
+      - name: Sovereign Final Pack Yukle
         uses: actions/upload-artifact@v4
         with:
-          name: KynexOs_Embedded_Pack_v230
+          name: KynexOs_Final_v230_18
           path: |
             .pio/build/*/kynexos_core_dio.bin
             .pio/build/*/partitions.bin
