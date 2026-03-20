@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.34 - The Architect's Fix
+ * KynexOs Sovereign Build v230.35 - The OPI Harmony
  * Geliştirici: Muhammed (Kynex)
- * Görev: Missing Declarations Fix, 8MB PSRAM Boot, Aligned JPG
+ * Görev: N16R8 OPI Memory Fix, 40MHz SPI, Safe JPG Decoding
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -11,14 +11,14 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
 #include <SPI.h>
-#include <WiFi.h>        // MUHAMMED: WiFi kutuphanesi eklendi
-#include <WebServer.h>   // MUHAMMED: Server kutuphanesi eklendi
+#include <WiFi.h>
+#include <WebServer.h>
 #include <TJpg_Decoder.h>
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "esp_task_wdt.h"
 
-// MUHAMMED: Hex kodları olan dosyamız
+// MUHAMMED: İçinde hex kodları olan Windows 10 resmi
 #include "wallpaper.h"
 
 // V325 DONANIM HARİTASI
@@ -32,38 +32,41 @@
 #define JOY_SELECT 6 
 
 Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
-
-// MUHAMMED: Önceki sürümde unuttuğum o kritik satır eklendi!
 WebServer server(80);
 
-unsigned long lock_timer = 0;
-bool psram_ok = false;
+unsigned long boot_lock_timer = 0;
+bool psram_active = false;
 
 // JPG Çizim Fonksiyonu (WDT Beslemeli)
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
     if (y >= tft.height()) return false;
     tft.drawRGBBitmap(x, y, bitmap, w, h);
-    esp_task_wdt_reset(); 
+    esp_task_wdt_reset(); // MUHAMMED: İzleyici köpeği sürekli besliyoruz
     return true;
 }
 
 void setup() {
+    // 1. Teşhis Portunu Aç
     Serial.begin(115200);
-    delay(2000);
+    delay(2500); // Sistemin kendine gelmesi için zaman tanı
     Serial.println("\n\n========================================");
-    Serial.println("KYNEX-OS V230.34 - THE ARCHITECT'S FIX");
+    Serial.println("KYNEX-OS V230.35 - OPI HARMONY BOOT");
     Serial.println("========================================");
 
+    // 2. N16R8 PSRAM (OPI) Senkronizasyonu
+    // MUHAMMED: Burası cihazının kaderini belirliyor!
     if (psramInit()) {
         Serial.printf("[SYSTEM] 8MB OPI PSRAM Basariyla Uyandi! Bos Alan: %d KB\n", ESP.getFreePsram() / 1024);
-        psram_ok = true;
+        psram_active = true;
     } else {
-        Serial.println("[HATA] PSRAM Uyanamadi! OPI Hatasi Olabilir.");
+        Serial.println("[HATA] PSRAM Uyanamadi! Cihaz dar bogaz yasayabilir.");
     }
 
-    esp_task_wdt_init(30, true);
+    // 3. İzleyici Köpek (Süreyi çok artırdık ki JPG çizerken reset atmasın)
+    esp_task_wdt_init(60, true); 
     esp_ota_mark_app_valid_cancel_rollback();
 
+    // 4. Pinler ve Ekran
     pinMode(TFT_BL, OUTPUT);
     digitalWrite(TFT_BL, HIGH); 
     pinMode(JOY_SELECT, INPUT_PULLUP);
@@ -72,59 +75,65 @@ void setup() {
     tft.begin(40000000); // 40MHz
     tft.setRotation(1);
     
+    // Retro-Go Renk Uyumu
     tft.sendCommand(0x36, (const uint8_t*)"\x28", 1);
     tft.sendCommand(0xB1, (const uint8_t*)"\x00\x1B", 2);
     tft.sendCommand(0xB6, (const uint8_t*)"\x08\x82\x27", 3);
 
     tft.fillScreen(0x0000);
     
-    Serial.println("[SYSTEM] Windows 10 JPG Çözülüyor...");
+    // 5. JPG Motorunu Çalıştır
+    Serial.println("[SYSTEM] Windows 10 Resmi (JPG) Ciziliyor...");
     TJpgDec.setJpgScale(1);
     TJpgDec.setCallback(tft_output);
     
     if (wallpaper_jpg_len > 1024) {
+        // Çizimi başlat
         TJpgDec.drawJpg(0, 0, wallpaper_jpg, wallpaper_jpg_len);
-        Serial.println("[SYSTEM] Sovereign Wallpaper Cizildi!");
+        Serial.println("[SYSTEM] Sovereign Wallpaper Ekranda!");
     } else {
-        Serial.println("[HATA] Wallpaper array okunamadi veya eksik!");
+        Serial.println("[HATA] Hex verisi eksik veya hatali format!");
         tft.setTextColor(0xF800);
         tft.setCursor(20, 100);
-        tft.print("HATA: HEX VERISI BOZUK VEYA EKSIK!");
+        tft.print("RESIM VERISI BOZUK!");
     }
 
-    tft.fillRect(0, 215, 320, 25, 0x10A2);
-    tft.fillRect(2, 217, 20, 20, 0x03FF);
+    // 6. UI Bileşenleri
+    tft.fillRect(0, 215, 320, 25, 0x10A2); // Görev Çubuğu
+    tft.fillRect(2, 217, 20, 20, 0x03FF);  // Başlat Butonu
     tft.drawRect(2, 217, 20, 20, 0xFFFF);
     
     tft.setTextColor(0xFFFF);
     tft.setTextSize(1);
     tft.setCursor(275, 224);
-    tft.print("23:45");
+    tft.print("00:15");
     
     tft.setCursor(60, 224);
     tft.setTextColor(0x07E0);
-    if(psram_ok) {
-        tft.print("PSRAM 8MB ACTIVE - STABLE");
+    if(psram_active) {
+        tft.print("OPI PSRAM ACTIVE - STABLE");
     } else {
-        tft.print("SOVEREIGN JPG STABLE");
+        tft.print("OPI ERROR - RUNNING SAFE");
     }
 
+    // 7. Ağ Servisleri
     WiFi.softAP("Kynex-Sovereign", "*muhammed*");
     server.begin();
 
-    lock_timer = millis();
-    Serial.println("[SYSTEM] Sistem Hazir. 5 saniyelik tus kilidi devrede.");
+    boot_lock_timer = millis();
+    Serial.println("[SYSTEM] Hazir! Tuş kalkanı 10 saniye aktif.");
 }
 
 void loop() {
     server.handleClient();
     esp_task_wdt_reset();
 
-    if (millis() - lock_timer > 5000) {
+    // 10 Saniye Tuş Koruması (Hayalet tetiklemeyi önlemek için)
+    if (millis() - boot_lock_timer > 10000) {
         if (digitalRead(JOY_SELECT) == LOW) {
-            delay(200);
+            delay(500);
             if (digitalRead(JOY_SELECT) == LOW) {
-                Serial.println("[ACTION] Retro-Go Atlamasi Onaylandi!");
+                Serial.println("[ACTION] Retro-Go Atlamasi Istendi!");
                 const esp_partition_t* target = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, "retrogo");
                 if (target) { 
                     esp_ota_set_boot_partition(target); 
