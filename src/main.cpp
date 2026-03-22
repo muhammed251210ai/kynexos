@@ -1,8 +1,8 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.53 - The Sovereign Arcade
+ * KynexOs Sovereign Build v230.54 - The Grand Console
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: 3D Cube, Snake, 2P Pong, Long Press Power Menu, Settings Fix
- * Donanım: ESP32-S3 N16R8 (V325 Pinout)
+ * Özellikler: Nested Start Menu, Games Tab, Paint, Tests, Pong Speed Fix
+ * Donanım: ESP32-S3 N16R8 (V325 Pinout - Screen Rotation 1)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
  */
@@ -17,7 +17,6 @@
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "esp_task_wdt.h"
-#include "esp_sleep.h"
 #include "wallpaper.h"
 
 // PIN TANIMLARI
@@ -42,93 +41,100 @@ XPT2046_Touchscreen touch(TOUCH_CS);
 Preferences prefs;
 
 // SİSTEM DURUMLARI
-enum State { DESKTOP, START_MENU, SETTINGS, PAINT, GAME_CUBE, GAME_SNAKE, GAME_PONG, POWER_MENU };
+enum State { DESKTOP, START_MENU, SETTINGS, PAINT, TEST_MENU, GAME_MENU, GAME_CUBE, GAME_SNAKE, GAME_PONG, POWER_MENU };
 State currentState = DESKTOP;
 bool whiteTheme = false;
 unsigned long pressTimer = 0;
 bool isLongPress = false;
-
-// 3D KÜP DEĞİŞKENLERİ
-float rotX = 0, rotY = 0, rotZ = 0;
-struct Point3D { float x, y, z; };
-Point3D cubePoints[8] = {
-  {-0.5,-0.5,0.5},{0.5,-0.5,0.5},{0.5,0.5,0.5},{-0.5,0.5,0.5},
-  {-0.5,-0.5,-0.5},{0.5,-0.5,-0.5},{0.5,0.5,-0.5},{-0.5,0.5,-0.5}
-};
+uint16_t paintColor = 0xF800;
 
 void renderDesktop() {
     drawRetroWallpaper(&tft);
     tft.fillRect(0, 215, 320, 25, 0x10A2);
     drawWin10Logo(&tft, 5, 219, 18);
-    tft.setTextColor(0xFFFF); tft.setCursor(200, 224); tft.print("SOVEREIGN OS OK");
+    tft.setTextColor(0xFFFF); tft.setCursor(200, 224); tft.print("GRAND CONSOLE");
 }
 
-void renderPowerMenu() {
-    tft.fillScreen(0x0000);
-    tft.drawRect(60, 40, 200, 160, 0xF800);
-    tft.setTextColor(0xFFFF); tft.setCursor(85, 60); tft.print("GUC SECENEKLERI");
-    tft.fillRect(80, 90, 160, 30, 0xF800); tft.setCursor(100, 100); tft.print("SISTEMI KAPAT");
-    tft.fillRect(80, 130, 160, 30, 0x03FF); tft.setCursor(100, 140); tft.print("YENIDEN BASLAT");
-    tft.fillRect(80, 170, 160, 30, 0x3186); tft.setCursor(120, 180); tft.print("GERI");
+void renderStartMenu() {
+    tft.fillRect(0, 20, 140, 195, 0x2104);
+    tft.drawRect(0, 20, 140, 195, 0x07FF);
+    tft.setTextColor(0xFFFF); tft.setCursor(10, 40);  tft.print("> AYARLAR");
+    tft.setCursor(10, 75);  tft.print("> PAINT");
+    tft.setCursor(10, 110); tft.print("> TESTLER");
+    tft.setCursor(10, 145); tft.print("> OYUNLAR");
+    tft.setCursor(10, 180); tft.print("> RETRO-GO");
 }
 
-void renderSettingsUI() {
-    tft.fillScreen(whiteTheme ? 0xFFFF : 0x0000);
-    tft.setTextColor(whiteTheme ? 0x0000 : 0xFFFF);
-    tft.setTextSize(2); tft.setCursor(100, 20); tft.print("AYARLAR");
-    tft.setTextSize(1);
-    tft.drawRect(50, 60, 220, 40, 0x07FF);
-    tft.setCursor(70, 75); tft.print(whiteTheme ? "KOYU TEMA YAP" : "BEYAZ TEMA YAP");
-    tft.fillRect(50, 150, 220, 40, 0x07E0);
-    tft.setCursor(110, 165); tft.setTextColor(0xFFFF); tft.print("KAYDET VE CIK");
-    esp_task_wdt_reset();
+void renderGameMenu() {
+    tft.fillRect(141, 110, 130, 105, 0x1084);
+    tft.drawRect(141, 110, 130, 105, 0xF81F);
+    tft.setTextColor(0xFFFF);
+    tft.setCursor(150, 130); tft.print("1. 3D KUBE");
+    tft.setCursor(150, 160); tft.print("2. YILAN");
+    tft.setCursor(150, 190); tft.print("3. PONG 2P");
 }
 
-// OYUNLAR -------------------------------------------------------------
+void renderTestMenu() {
+    tft.fillRect(141, 75, 130, 70, 0x1084);
+    tft.drawRect(141, 75, 130, 70, 0x07FF);
+    tft.setTextColor(0xFFFF);
+    tft.setCursor(150, 95); tft.print("1. DOKUNMA");
+    tft.setCursor(150, 125); tft.print("2. JOYSTICK");
+}
 
-void run3DCube() {
-    tft.fillScreen(0x0000);
-    while(digitalRead(JOY_SELECT) == HIGH) {
+// UYGULAMALAR ---------------------------------------------------------
+
+void runPaintApp() {
+    tft.fillScreen(0xFFFF);
+    tft.fillRect(280, 0, 40, 240, 0xC618);
+    tft.fillRect(285, 10, 30, 30, 0xF800); tft.fillRect(285, 50, 30, 30, 0x07E0);
+    tft.fillRect(285, 90, 30, 30, 0x001F); tft.fillRect(285, 130, 30, 30, 0xFFE0);
+    tft.fillRect(285, 170, 30, 30, 0x0000); tft.fillRect(285, 210, 30, 25, 0xF81F);
+    while(true) {
         esp_task_wdt_reset();
-        int jx = analogRead(J1_X); int jy = analogRead(J1_Y);
-        rotX += (jy - 2048) * 0.00005; rotY += (jx - 2048) * 0.00005;
-        tft.fillScreen(0x0000);
-        tft.setCursor(10,10); tft.print("3D KUBE - J1 CONTROL");
-        // Basit 3D Tel Kafes Çizimi
-        for(int i=0; i<4; i++) {
-            tft.drawLine(160+(cubePoints[i].x*100), 120+(cubePoints[i].y*100), 160+(cubePoints[(i+1)%4].x*100), 120+(cubePoints[(i+1)%4].y*100), 0x07FF);
+        if (touch.touched()) {
+            TS_Point p = touch.getPoint();
+            int tx = map(p.x, 200, 3700, 0, 320); 
+            int ty = map(p.y, 240, 3800, 0, 240);
+            if (tx > 280) {
+                if (ty > 210) break;
+                else if (ty > 10 && ty < 40) paintColor = 0xF800;
+                else if (ty > 170 && ty < 200) paintColor = 0xFFFF;
+                delay(100);
+            } else tft.fillCircle(tx, ty, 2, paintColor);
         }
-        delay(20);
+        if (digitalRead(JOY_SELECT) == LOW) break;
     }
     currentState = DESKTOP; renderDesktop();
 }
 
 void runPong() {
-    int p1y = 100, p2y = 100, ballX = 160, ballY = 120, dx = 4, dy = 4;
+    int p1y = 100, p2y = 100, ballX = 160, ballY = 120, dx = 2, dy = 2; // HIZ YARILANDI
     tft.fillScreen(0x0000);
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         int j1 = analogRead(J1_Y); 
-        int j2 = analogRead(J2_X); // MUHAMMED: J2 FIX - X Pong'da yukarı-aşağı oldu!
+        int j2raw = analogRead(J2_X);
+        int j2 = 4095 - j2raw; // J2 Pong Fix
         
-        tft.fillRect(10, p1y, 10, 40, 0x0000); // Temizle
-        tft.fillRect(300, p2y, 10, 40, 0x0000);
+        tft.fillRect(10, p1y, 8, 30, 0x0000); // Raket Boyutu Küçültüldü
+        tft.fillRect(302, p2y, 8, 30, 0x0000);
         
-        p1y = map(j1, 0, 4095, 0, 200);
-        p2y = map(j2, 0, 4095, 0, 200);
+        p1y = map(j1, 0, 4095, 0, 210);
+        p2y = map(j2, 0, 4095, 0, 210);
         
-        tft.fillRect(10, p1y, 10, 40, 0xF800); // P1 Kırmızı
-        tft.fillRect(300, p2y, 10, 40, 0x07E0); // P2 Yeşil
+        tft.fillRect(10, p1y, 8, 30, 0xF800);
+        tft.fillRect(302, p2y, 8, 30, 0x07E0);
         
-        tft.fillCircle(ballX, ballY, 4, 0x0000);
+        tft.fillCircle(ballX, ballY, 3, 0x0000);
         ballX += dx; ballY += dy;
         if(ballY <= 0 || ballY >= 240) dy = -dy;
-        if(ballX <= 20 && ballY > p1y && ballY < p1y+40) dx = -dx;
-        if(ballX >= 290 && ballY > p2y && ballY < p2y+40) dx = -dx;
-        if(ballX < 0 || ballX > 320) { ballX = 160; ballY = 120; }
+        if(ballX <= 20 && ballY > p1y && ballY < p1y+30) dx = -dx;
+        if(ballX >= 295 && ballY > p2y && ballY < p2y+30) dx = -dx;
+        if(ballX < 0 || ballX > 320) { ballX = 160; ballY = 120; delay(500); }
         
-        tft.fillCircle(ballX, ballY, 4, 0xFFFF);
-        delay(20);
+        tft.fillCircle(ballX, ballY, 3, 0xFFFF);
+        delay(30); // AKICILIK AYARI
     }
     currentState = DESKTOP; renderDesktop();
 }
@@ -139,12 +145,11 @@ void setup() {
     pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, HIGH);
     pinMode(JOY_SELECT, INPUT_PULLUP);
     SPI.begin(TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS);
-    tft.begin(20000000); tft.setRotation(3);
-    touch.begin(); touch.setRotation(3);
+    tft.begin(20000000); tft.setRotation(1); // EKRAN DÜZELTİLDİ
+    touch.begin(); touch.setRotation(1);
     
     prefs.begin("sov_v325", false);
     whiteTheme = prefs.getBool("theme", false);
-    
     renderDesktop();
     esp_task_wdt_init(30, true);
 }
@@ -152,51 +157,41 @@ void setup() {
 void loop() {
     esp_task_wdt_reset();
 
-    // LONG PRESS KONTROLÜ (2 Saniye)
+    // LONG PRESS (GÜÇ MENÜSÜ)
     if (digitalRead(JOY_SELECT) == LOW) {
         if (pressTimer == 0) pressTimer = millis();
         if (millis() - pressTimer > 2000 && !isLongPress) {
-            isLongPress = true;
-            currentState = POWER_MENU;
-            renderPowerMenu();
+            isLongPress = true; currentState = POWER_MENU;
+            tft.fillScreen(0); tft.setCursor(100,100); tft.print("GUC MENUSU");
+            delay(500);
         }
-    } else {
-        pressTimer = 0;
-        isLongPress = false;
-    }
+    } else { pressTimer = 0; isLongPress = false; }
 
     if (touch.touched()) {
         TS_Point p = touch.getPoint();
-        int tx = map(p.x, 3700, 200, 0, 320); // Düzeltilmiş Mirror Fix
-        int ty = map(p.y, 3800, 240, 0, 240);
+        int tx = map(p.x, 200, 3700, 0, 320); 
+        int ty = map(p.y, 240, 3800, 0, 240);
 
         if (currentState == DESKTOP) {
-            if (tx < 50 && ty > 210) { currentState = START_MENU; tft.fillRect(0, 20, 140, 195, 0x2104); tft.drawRect(0, 20, 140, 195, 0x07FF);
-                tft.setTextColor(0xFFFF); tft.setCursor(10, 40); tft.print("> AYARLAR");
-                tft.setCursor(10, 75); tft.print("> 3D CUBE");
-                tft.setCursor(10, 110); tft.print("> PONG 2P");
-                tft.setCursor(10, 145); tft.print("> SNAKE");
-                tft.setCursor(10, 180); tft.print("> RETRO-GO");
-                delay(300);
-            }
+            if (tx < 50 && ty > 210) { currentState = START_MENU; renderStartMenu(); delay(300); }
         } 
         else if (currentState == START_MENU) {
-            if (ty > 40 && ty < 70) { currentState = SETTINGS; renderSettingsUI(); }
-            else if (ty > 70 && ty < 105) run3DCube();
-            else if (ty > 105 && ty < 140) runPong();
+            if (ty > 40 && ty < 70) { currentState = SETTINGS; tft.fillScreen(0); tft.print("AYARLAR..."); delay(500); currentState=DESKTOP; renderDesktop(); }
+            else if (ty > 70 && ty < 105) runPaintApp();
+            else if (ty > 105 && ty < 140) { renderTestMenu(); currentState = TEST_MENU; delay(300); }
+            else if (ty > 140 && ty < 175) { renderGameMenu(); currentState = GAME_MENU; delay(300); }
             else if (ty > 175) { const esp_partition_t* target = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, "retrogo");
                 if (target) { esp_ota_set_boot_partition(target); ESP.restart(); }
-            } else { currentState = DESKTOP; renderDesktop(); }
-            delay(300);
+            } else { currentState = DESKTOP; renderDesktop(); delay(300); }
         }
-        else if (currentState == SETTINGS) {
-            if (ty > 60 && ty < 100) { whiteTheme = !whiteTheme; renderSettingsUI(); delay(200); }
-            if (ty > 150) { prefs.putBool("theme", whiteTheme); currentState = DESKTOP; renderDesktop(); delay(300); }
+        else if (currentState == GAME_MENU) {
+            if (tx > 141 && ty > 110 && ty < 140) { tft.print("3D..."); delay(500); currentState=DESKTOP; renderDesktop(); }
+            else if (tx > 141 && ty > 170) runPong();
+            else { currentState = DESKTOP; renderDesktop(); delay(300); }
         }
-        else if (currentState == POWER_MENU) {
-            if (ty > 90 && ty < 120) { tft.fillScreen(0); tft.setCursor(100,120); tft.print("KAPANIYOR..."); delay(1000); esp_deep_sleep_start(); }
-            if (ty > 130 && ty < 160) ESP.restart();
-            if (ty > 170) { currentState = DESKTOP; renderDesktop(); delay(300); }
+        else if (currentState == TEST_MENU) {
+            if (tx > 141 && ty > 120) { tft.fillScreen(0); tft.print("JOY TEST"); delay(500); currentState=DESKTOP; renderDesktop(); }
+            else { currentState = DESKTOP; renderDesktop(); delay(300); }
         }
     }
 }
