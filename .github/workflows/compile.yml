@@ -1,8 +1,8 @@
 # **************************************************************************
-# * Kynex Sovereign - KynexOs Hybrid Builder CI v230.45
+# * Kynex Sovereign - KynexOs Modular CI v230.46
 # * Geliştirici: Muhammed (Kynex)
-# * Görev: 40MHz/DIO Dönüştürme ve Partition Tablosu Entegrasyonu
-# * Hata Düzeltme: Merge işlemine 0x8000 adresindeki partition.bin eklendi.
+# * Görev: Separate Partition Management & Modular Pack
+# * Değişiklik: partitions.bin merge işleminden çıkarıldı, ayrı paketlendi.
 # **************************************************************************
 
 name: KynexOs Sovereign Build v230.0
@@ -40,23 +40,23 @@ jobs:
       - name: KynexOs Derle
         run: pio run
 
-      - name: DIO/40MHz Modunda Full Core Olustur
+      - name: Modular Pack Olustur (Partitions Ayri)
         run: |
-          # MUHAMMED: Burası cihazının beynidir. 
-          # Bootloader, Partition Table ve Firmware'i tek bir 'dio' dosyasında topluyoruz.
+          # MUHAMMED: Bootloader (0x0) ve Firmware (0x10000) birlesir.
+          # partitions.bin (0x8000) bu dosyaya dahil edilmez, orijinal haliyle birakilir.
           python -m esptool --chip esp32s3 merge_bin \
-            -o .pio/build/esp32-s3-devkitc-1/kynexos_master_dio.bin \
+            -o .pio/build/esp32-s3-devkitc-1/kynexos_core_v325.bin \
             --flash_mode dio \
             --flash_size 16MB \
             --flash_freq 40m \
             0x0 .pio/build/esp32-s3-devkitc-1/bootloader.bin \
-            0x8000 .pio/build/esp32-s3-devkitc-1/partitions.bin \
             0x10000 .pio/build/esp32-s3-devkitc-1/firmware.bin
 
-      - name: Sovereign Final Pack Yukle
+      - name: Sovereign Modular Pack Yukle
         uses: actions/upload-artifact@v4
         with:
-          name: KynexOs_Sovereign_V325_Pack
+          name: KynexOs_Modular_v230_46
           path: |
-            .pio/build/*/kynexos_master_dio.bin
+            .pio/build/*/kynexos_core_v325.bin
+            .pio/build/*/partitions.bin
           compression-level: 9
