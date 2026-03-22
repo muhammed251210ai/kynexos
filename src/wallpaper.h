@@ -1,5 +1,6 @@
-/* * Sovereign Wallpaper & UI Engine - v230.55
+/* * Sovereign Wallpaper Engine - Windows 10 Hero HD v230.56
  * Geliştirici: Muhammed (Kynex)
+ * Özellikler: Deep Blue Gradient, Light Beams, High-Contrast Win10 Logo
  */
 
 #ifndef WALLPAPER_H
@@ -8,32 +9,43 @@
 #include <Adafruit_GFX.h>
 #include <esp_task_wdt.h>
 
-#define RETRO_SKY     0x180E 
-#define RETRO_PURPLE  0x3012 
-#define RETRO_SUN_T   0xFDE0 
-#define RETRO_SUN_B   0xF800 
-#define RETRO_CYAN    0x07FF 
-#define RETRO_MAGENTA 0xF81F
+// Windows 10 Renk Paleti
+#define W10_DARK_BLUE 0x000B // Çok Koyu Mavi
+#define W10_MID_BLUE  0x0015 // Orta Mavi
+#define W10_GLOW      0x5DFF // Hero Işığı
+#define W10_WHITE     0xFFFF 
 
-void drawRetroWallpaper(Adafruit_GFX *tft) {
-    for (int i = 0; i < 160; i++) {
-        tft->drawFastHLine(0, i, 320, (i < 80) ? RETRO_SKY : RETRO_PURPLE);
-        if (i % 40 == 0) esp_task_wdt_reset();
+void drawWin10HeroWallpaper(Adafruit_GFX *tft) {
+    // 1. Derinlikli Gradyan Arka Plan
+    for (int i = 0; i < 240; i++) {
+        uint16_t color = (i < 120) ? W10_DARK_BLUE : W10_MID_BLUE;
+        tft->drawFastHLine(0, i, 320, color);
+        if (i % 30 == 0) esp_task_wdt_reset();
     }
-    for (int r = 0; r < 65; r++) {
-        tft->drawCircle(160, 95, r, (r < 30) ? RETRO_SUN_T : RETRO_SUN_B);
+
+    // 2. Hero Işık Huzmeleri (Radial Glow Simülasyonu)
+    for(int i = 0; i < 60; i++) {
+        tft->drawLine(160, 120, 160 + (i*3), 0, W10_MID_BLUE | 0x1010);
+        tft->drawLine(160, 120, 160 - (i*3), 240, W10_MID_BLUE | 0x1010);
     }
-    tft->fillTriangle(0, 160, 70, 110, 140, 160, 0x1004);
-    tft->drawTriangle(0, 160, 70, 110, 140, 160, RETRO_MAGENTA);
-    tft->fillTriangle(180, 160, 250, 100, 320, 160, 0x1004);
-    tft->drawTriangle(180, 160, 250, 100, 320, 160, RETRO_MAGENTA);
-    tft->fillRect(0, 158, 320, 3, RETRO_CYAN);
-    for (int y = 161; y < 240; y += 8) tft->drawFastHLine(0, y, 320, RETRO_PURPLE);
-    for (int x = -100; x < 420; x += 25) tft->drawLine(x, 240, 160, 161, RETRO_PURPLE);
+
+    // 3. Keskin Windows 10 Logosu (Merkezi Glowlu)
+    int lx = 145, ly = 95, ls = 35;
+    int gap = 3;
+    int h = ls / 2;
+    
+    // Logoyu Işık Huzmesiyle Çiz
+    tft->fillRect(lx, ly, h-gap, h-gap, W10_GLOW);           // Sol Üst
+    tft->fillRect(lx, ly+h, h-gap, h-gap, W10_GLOW);         // Sol Alt
+    tft->fillRect(lx+h, ly-4, h-gap, h+4-gap, W10_WHITE);    // Sağ Üst (Perspektif)
+    tft->fillRect(lx+h, ly+h, h-gap, h+4-gap, W10_WHITE);    // Sağ Alt (Perspektif)
+
+    // Orta Işık Efekti
+    tft->drawCircle(160, 115, 45, W10_GLOW);
     esp_task_wdt_reset();
 }
 
-void drawWin10Logo(Adafruit_GFX *tft, int x, int y, int size) {
+void drawWin10SmallLogo(Adafruit_GFX *tft, int x, int y, int size) {
     int half = size / 2;
     tft->fillRect(x, y, half-1, half-1, 0xFFFF);
     tft->fillRect(x, y+half, half-1, half-1, 0xFFFF);
