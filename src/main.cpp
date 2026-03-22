@@ -1,7 +1,8 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.36 - The Living Core
+ * KynexOs Sovereign Build v230.37 - The Eternal Glow
  * Geliştirici: Muhammed (Kynex)
- * Görev: Animated GFX Wallpaper, 40MHz SPI, PSRAM Sync, Retro-Go Bridge
+ * Görev: Sequenced Boot, 8MB PSRAM Sync, 40MHz SPI, Animated GFX
+ * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
  */
@@ -11,12 +12,11 @@
 #include <Adafruit_ILI9341.h>
 #include <SPI.h>
 #include <WiFi.h>
-#include <WebServer.h>
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "esp_task_wdt.h"
 
-// MUHAMMED: Animasyonlu GFX motorumuzu dahil ediyoruz
+// MUHAMMED: Animasyon motorunu dahil ettik
 #include "wallpaper.h"
 
 // V325 DONANIM HARİTASI
@@ -30,56 +30,53 @@
 #define JOY_SELECT 6 
 
 Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
-WebServer server(80);
 
 unsigned long boot_timer = 0;
 unsigned long anim_timer = 0;
-bool system_online = false;
+bool is_stable = false;
 
-void drawSovereignUI() {
-    Serial.println("[GUI] Arka plan ve pencereler olusturuluyor...");
-    drawStaticWin10(&tft); // wallpaper.h'dan geliyor
+void drawInterface() {
+    Serial.println("[GUI] Arka plan olusturuluyor...");
+    drawHeroBackground(&tft);
     
-    // Taskbar
+    // Görev Çubuğu
     tft.fillRect(0, 215, 320, 25, 0x10A2);
     tft.fillRect(2, 217, 20, 20, 0x03FF);
-    tft.drawRect(2, 217, 20, 20, 0xFFFF);
     
     tft.setTextColor(0xFFFF);
     tft.setTextSize(1);
-    tft.setCursor(275, 224);
-    tft.print("18:30");
+    tft.setCursor(100, 224);
+    tft.print("SOVEREIGN ETERNAL v230.37");
     
-    tft.setCursor(60, 224);
-    tft.setTextColor(0x07E0);
-    tft.print("SOVEREIGN ANIMATED OS");
-
     // Masaüstü İkonu
     tft.fillRect(20, 20, 40, 40, 0x3186); 
     tft.drawRect(20, 20, 40, 40, 0xFFFF);
     tft.setCursor(15, 65);
-    tft.print("RETRO-GO");
+    tft.print("OYUNLAR");
 }
 
 void setup() {
+    // 1. Kademeli Başlangıç (Enerji Patlamasını Önle)
     Serial.begin(115200);
-    delay(2000);
-    Serial.println("\n\n--- KYNEX-OS V230.36 STARTING ---");
+    delay(3000); 
+    Serial.println("\n\n--- SOVEREIGN OS: THE ETERNAL GLOW STARTING ---");
 
-    // 8MB OPI PSRAM'i uyandır
+    // 2. PSRAM UYANDIRMA
     if (psramInit()) {
-        Serial.printf("[SYSTEM] 8MB PSRAM Hazir. Bos: %d KB\n", ESP.getFreePsram() / 1024);
+        Serial.printf("[SYSTEM] 8MB OPI PSRAM Aktif. Bos Alan: %d KB\n", ESP.getFreePsram() / 1024);
     }
 
+    // 3. İzleyici Köpek (Watchdog)
     esp_task_wdt_init(30, true);
     esp_ota_mark_app_valid_cancel_rollback();
 
+    // 4. Ekran Hazırlığı
     pinMode(TFT_BL, OUTPUT);
     digitalWrite(TFT_BL, HIGH); 
     pinMode(JOY_SELECT, INPUT_PULLUP);
     
     SPI.begin(TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS);
-    tft.begin(40000000); // 40MHz Hız
+    tft.begin(40000000); // 40MHz
     tft.setRotation(1);
     
     // Retro-Go Sync
@@ -87,31 +84,31 @@ void setup() {
     tft.sendCommand(0xB1, (const uint8_t*)"\x00\x1B", 2);
     tft.sendCommand(0xB6, (const uint8_t*)"\x08\x82\x27", 3);
 
-    initSovereignWallpaper(); // Parçacıkları hazırla
-    drawSovereignUI();
+    // 5. UI ve Animasyon Başlatma
+    initSovereignStars();
+    drawInterface();
 
+    // WiFi (İhtiyaç yoksa kapalı tutmak en stabilidir, ama senin için SoftAP açıyoruz)
     WiFi.softAP("Kynex-Sovereign", "*muhammed*");
-    server.begin();
 
     boot_timer = millis();
-    system_online = true;
-    Serial.println("[SYSTEM] Arayuz Aktif. Animasyon baslatildi.");
+    is_stable = true;
+    Serial.println("[SYSTEM] Sistem Stabil. Sovereign Online.");
 }
 
 void loop() {
-    server.handleClient();
     esp_task_wdt_reset();
 
-    // MUHAMMED: Her 50ms'de bir ışık tanelerini hareket ettir
-    if (millis() - anim_timer > 50) {
-        updateSovereignAnimation(&tft);
+    // 50ms'de bir animasyon güncelle (İşlemciyi yormadan)
+    if (is_stable && (millis() - anim_timer > 50)) {
+        updateStars(&tft);
         anim_timer = millis();
     }
 
-    // Retro-Go Geçiş (10 Saniye Korumalı)
-    if (system_online && (millis() - boot_timer > 10000)) {
+    // Retro-Go Geçiş (10 Saniye Buton Kilidi)
+    if (is_stable && (millis() - boot_timer > 10000)) {
         if (digitalRead(JOY_SELECT) == LOW) {
-            delay(500);
+            delay(500); 
             if (digitalRead(JOY_SELECT) == LOW) {
                 Serial.println("[ACTION] Retro-Go Atlamasi Onaylandi!");
                 const esp_partition_t* target = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, "retrogo");
