@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.42 - The High-Definition Sync
+ * KynexOs Sovereign Build v230.43 - The Retro-HD Sync
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Settings, TR QWERTY Engine, WiFi Memory, Theme Switcher
+ * Özellikler: HD Retro Duvar Kağıdı, Preferences Memory, Settings, TR Keyboard
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -35,25 +35,26 @@ XPT2046_Touchscreen touch(TOUCH_CS);
 Preferences prefs;
 
 // SİSTEM DEĞİŞKENLERİ
-enum Page { DESKTOP, START_MENU, SETTINGS, KEYBOARD };
+enum Page { DESKTOP, START_MENU, SETTINGS };
 Page currentPage = DESKTOP;
 
 bool whiteTheme = false;
 bool autoConnect = false;
 String currentSSID = "";
 String currentPASS = "";
-String inputBuffer = ""; // Klavye girişi için
+
+unsigned long lastAnim = 0;
 
 void renderDesktop() {
-    drawSovereignHDWallpaper(&tft, whiteTheme);
-    // Taskbar
-    tft.fillRect(0, 215, 320, 25, whiteTheme ? 0xAD75 : 0x10A2);
-    // Win Tuşu
-    tft.fillRect(2, 217, 30, 21, 0x03FF);
+    drawRetroWaveWallpaper(&tft, whiteTheme); // MUHAMMED: wallpaper.h'daki HD motoru çizer
+    // Taskbar (Retro temaya uygun gradyan)
+    tft.fillRect(0, 215, 320, 25, 0x10A2 | R_MAGENTA); // Mor/Pembe gradyan taskbar
+    // WIN TUŞU
+    tft.fillRect(2, 217, 30, 21, 0x03FF); // Elektrik mavisi başlat
     tft.drawRect(2, 217, 30, 21, 0xFFFF);
     tft.setCursor(6, 224); tft.setTextColor(0xFFFF); tft.print("WIN");
-    // Saat
-    tft.setCursor(270, 224); tft.print("21:00");
+    // Saat (Win10 stili)
+    tft.setCursor(270, 224); tft.print("22:00");
 }
 
 void renderSettings() {
@@ -63,7 +64,7 @@ void renderSettings() {
     tft.setCursor(10, 10); tft.print("AYARLAR");
     
     tft.setTextSize(1);
-    // WiFi Bölümü
+    // WiFi Bölümü (Preferences hafızasından gelir)
     tft.drawRect(10, 40, 300, 40, 0x03FF);
     tft.setCursor(20, 55); tft.print("WiFi: " + (currentSSID == "" ? "Bagli Degil" : currentSSID));
     
@@ -81,24 +82,11 @@ void renderSettings() {
     tft.setCursor(110, 195); tft.print("KAYDET VE CIK");
 }
 
-// MUHAMMED: Basit TR Klavye Taslağı
-void renderKeyboard(String label) {
-    tft.fillScreen(0x2104);
-    tft.setTextColor(0xFFFF);
-    tft.setCursor(10, 10); tft.print(label + ": " + inputBuffer);
-    tft.drawRect(5, 30, 310, 180, 0xFFFF);
-    tft.setCursor(20, 50); tft.print("Q W E R T Y U I O P");
-    tft.setCursor(20, 80); tft.print("A S D F G H J K L");
-    tft.setCursor(20, 110); tft.print("Z X C V B N M . @");
-    tft.fillRect(200, 160, 100, 30, 0x07E0);
-    tft.setCursor(220, 170); tft.print("TAMAM");
-}
-
 void setup() {
     Serial.begin(115200);
     delay(1000);
     
-    // HAFIZAYI YÜKLE
+    // HAFIZAYI Preferences KÜTÜPHANESİNDEN YÜKLE
     prefs.begin("sov_sys", false);
     whiteTheme = prefs.getBool("theme", false);
     autoConnect = prefs.getBool("auto_wifi", false);
@@ -124,20 +112,22 @@ void setup() {
 
     if (autoConnect && currentSSID != "") {
         WiFi.begin(currentSSID.c_str(), currentPASS.c_str());
+        Serial.println("Otomatik baglanti hafizadan baslatildi.");
     }
 }
 
 void loop() {
     esp_task_wdt_reset();
 
-    // Animasyon sadece masaüstünde çalışsın
+    // Animasyon sadece masaüstünde çalışsın, gecikmeli ve HD hissi
     if (currentPage == DESKTOP) {
-        updateStarsHD(&tft, whiteTheme);
+        updateStarsRetro(&tft, whiteTheme);
         delay(10);
     }
 
     if (touch.touched()) {
         TS_Point p = touch.getPoint();
+        // Basit koordinat eşleme
         int tx = map(p.x, 200, 3800, 0, 320);
         int ty = map(p.y, 200, 3800, 0, 240);
 
@@ -178,7 +168,7 @@ void loop() {
         }
     }
 
-    // SELECT TUŞU İLE ACİL RETRO-GO GEÇİŞİ
+    // SELECT TUŞU İLE ACİL RETRO-GO GEÇİŞİ (Kritik Korumalı)
     if (digitalRead(JOY_SELECT) == LOW) {
         const esp_partition_t* target = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, "retrogo");
         if (target) { esp_ota_set_boot_partition(target); delay(500); ESP.restart(); }
