@@ -1,51 +1,57 @@
-/* * Sovereign Wallpaper Engine - Animated Win10 Edition v230.38
+/* * Sovereign Wallpaper Engine - Theme & Animation Sync v230.41
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Smooth Blue Gradient, Floating Stars
  */
 
 #ifndef WALLPAPER_H
 #define WALLPAPER_H
 
 #include <Adafruit_GFX.h>
+#include <esp_task_wdt.h>
 
-#define SOV_DARK   0x0008
-#define SOV_BLUE   0x0014
-#define SOV_GLOW   0x5DFF
-
-struct Particle {
+struct SovereignStar {
     float x, y, speed;
+    uint16_t color;
 };
 
-Particle particles[15];
+SovereignStar stars[15];
 
 void initSovereignWallpaper() {
     for (int i = 0; i < 15; i++) {
-        particles[i].x = random(0, 320);
-        particles[i].y = random(0, 240);
-        particles[i].speed = (float)random(10, 25) / 10.0;
+        stars[i].x = random(0, 320);
+        stars[i].y = random(0, 240);
+        stars[i].speed = (float)random(10, 25) / 10.0;
+        stars[i].color = 0xADFF;
     }
 }
 
-void drawHeroBackground(Adafruit_GFX *tft) {
+void drawHeroBackground(Adafruit_GFX *tft, bool whiteTheme) {
+    uint16_t topColor = whiteTheme ? 0xFFFF : 0x0008;
+    uint16_t botColor = whiteTheme ? 0xDEFB : 0x0014;
+    uint16_t winColor = whiteTheme ? 0x03FF : 0x5DFF;
+
     for (int i = 0; i < 240; i++) {
-        tft->drawFastHLine(0, i, 320, (i < 120) ? SOV_DARK : SOV_BLUE);
+        tft->drawFastHLine(0, i, 320, (i < 120) ? topColor : botColor);
+        if (i % 20 == 0) esp_task_wdt_reset();
     }
-    // Windows Logosunu Çiz
-    tft->fillRect(220, 80, 25, 25, SOV_GLOW);
-    tft->fillRect(220, 110, 25, 25, SOV_GLOW);
-    tft->fillRect(250, 75, 30, 30, 0xADFF);
-    tft->fillRect(250, 110, 30, 30, 0xADFF);
+    
+    // Windows Logosunun GFX hali (Perspektif)
+    tft->fillRect(220, 80, 25, 25, winColor);
+    tft->fillRect(220, 110, 25, 25, winColor);
+    tft->fillRect(250, 75, 30, 30, winColor);
+    tft->fillRect(250, 110, 30, 30, winColor);
 }
 
-void updateAnimation(Adafruit_GFX *tft) {
+void updateStars(Adafruit_GFX *tft, bool whiteTheme) {
+    uint16_t topColor = whiteTheme ? 0xFFFF : 0x0008;
+    uint16_t botColor = whiteTheme ? 0xDEFB : 0x0014;
     for (int i = 0; i < 15; i++) {
-        tft->drawPixel((int)particles[i].x, (int)particles[i].y, (particles[i].y < 120) ? SOV_DARK : SOV_BLUE);
-        particles[i].x -= particles[i].speed;
-        if (particles[i].x < 0) {
-            particles[i].x = 320;
-            particles[i].y = random(0, 240);
+        tft->drawPixel((int)stars[i].x, (int)stars[i].y, (stars[i].y < 120) ? topColor : botColor);
+        stars[i].x -= stars[i].speed;
+        if (stars[i].x < 0) {
+            stars[i].x = 320;
+            stars[i].y = random(0, 240);
         }
-        tft->drawPixel((int)particles[i].x, (int)particles[i].y, 0xFFFF);
+        tft->drawPixel((int)stars[i].x, (int)stars[i].y, whiteTheme ? 0x0011 : 0xFFFF);
     }
 }
 
