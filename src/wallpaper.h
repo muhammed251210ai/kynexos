@@ -1,6 +1,5 @@
-/* * Sovereign Wallpaper & UI Assets - v230.50
+/* * Sovereign Wallpaper Engine - HD v230.51
  * Geliştirici: Muhammed (Kynex)
- * Görev: Retro-Wave Wallpaper ve Win10 Logo Çizimi
  */
 
 #ifndef WALLPAPER_H
@@ -35,12 +34,11 @@ void drawRetroWallpaper(Adafruit_GFX *tft) {
 }
 
 void drawWin10Logo(Adafruit_GFX *tft, int x, int y, int size) {
-    int gap = 2;
     int half = size / 2;
-    tft->fillRect(x, y, half-gap, half-gap, 0xFFFF);
-    tft->fillRect(x, y+half, half-gap, half-gap, 0xFFFF);
-    tft->fillRect(x+half, y-2, half-gap, half+2-gap, 0xFFFF);
-    tft->fillRect(x+half, y+half, half-gap, half+2-gap, 0xFFFF);
+    tft->fillRect(x, y, half-1, half-1, 0xFFFF);
+    tft->fillRect(x, y+half, half-1, half-1, 0xFFFF);
+    tft->fillRect(x+half, y-1, half-1, half, 0xFFFF);
+    tft->fillRect(x+half, y+half, half-1, half, 0xFFFF);
 }
 
 #endif
