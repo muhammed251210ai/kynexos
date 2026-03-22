@@ -1,4 +1,4 @@
-/* * Sovereign Wallpaper Engine - HD v230.51
+/* * Sovereign Wallpaper Engine - HD v230.52
  * Geliştirici: Muhammed (Kynex)
  */
 
