@@ -1,5 +1,6 @@
-/* * Sovereign Wallpaper Engine - The Hi-Fi Symphony v230.105
+/* * Sovereign Wallpaper Engine - The Hardware Unlock v230.109
  * Geliştirici: Muhammed (Kynex)
+ * Özellikler: Orijinal 3D Perspektifli Windows 10 Logosu (Matematiksel Çizim)
  */
 
 #ifndef WALLPAPER_H
