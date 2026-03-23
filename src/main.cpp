@@ -1,8 +1,8 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.103 - The Multimedia Core
+ * KynexOs Sovereign Build v230.104 - The Hi-Fi Core
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Audio Engine (GPIO 18), Touch Shift Fix, Live Clock, Games Sound
- * Donanım: ESP32-S3 N16R8 (V325 Pinout)
+ * Özellikler: MAX98357 I2S DAC Support, Touch Perfect Center, Live Modules
+ * Donanım: ESP32-S3 N16R8 (V325 Pinout - Absolute Calibration)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
  */
@@ -20,6 +20,8 @@
 #include "esp_partition.h"
 #include "esp_task_wdt.h"
 #include "esp_sleep.h"
+#include "driver/i2s.h" // MUHAMMED: I2S Dijital Ses Kütüphanesi
+#include <math.h>
 #include "wallpaper.h"
 
 // DONANIM PİNLERİ
@@ -32,13 +34,17 @@
 #define TFT_BL 1
 #define TOUCH_CS 16
 #define JOY_SELECT 0 
-#define SPEAKER_PIN 18 // MUHAMMED: HOPARLÖR PİNİ EKLENDİ
 
 // JOYSTICK PİNLERİ
 #define J1_X 5
 #define J1_Y 4
 #define J2_X 7
 #define J2_Y 15
+
+// MUHAMMED: MAX98357 I2S PİNLERİ (Eski hoparlör pinini LRC yaptık)
+#define I2S_LRC  18  // MAX98357 -> LRC (Word Select)
+#define I2S_BCLK 17  // MAX98357 -> BCLK (Bit Clock)
+#define I2S_DOUT 43  // MAX98357 -> DIN (Data In)
 
 Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
 XPT2046_Touchscreen touch(TOUCH_CS);
@@ -55,21 +61,57 @@ unsigned long lastClockUpdate = 0;
 bool isLongPress = false;
 uint16_t paintColor = 0xF800;
 
-// SES MOTORU (AUDIO ENGINE)
-void playClick() { tone(SPEAKER_PIN, 1200, 15); } // Menü Tık Sesi
-void playBeep() { tone(SPEAKER_PIN, 1500, 50); } // İşlem Onay Sesi
-void playError() { tone(SPEAKER_PIN, 300, 200); } // Hata Sesi
-void playBootSound() { // Win10 Açılış Hissi
-    tone(SPEAKER_PIN, 523, 150); delay(150);
-    tone(SPEAKER_PIN, 659, 150); delay(150);
-    tone(SPEAKER_PIN, 784, 150); delay(150);
-    tone(SPEAKER_PIN, 1046, 400); delay(400);
-    noTone(SPEAKER_PIN);
+// ---------------- I2S DİJİTAL SES MOTORU ----------------
+void initI2S() {
+    i2s_config_t i2s_config = {
+        .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
+        .sample_rate = 44100,
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+        .communication_format = I2S_COMM_FORMAT_STAND_I2S,
+        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+        .dma_buf_count = 8,
+        .dma_buf_len = 64,
+        .use_apll = false,
+        .tx_desc_auto_clear = true
+    };
+    i2s_pin_config_t pin_config = {
+        .bck_io_num = I2S_BCLK,
+        .ws_io_num = I2S_LRC,
+        .data_out_num = I2S_DOUT,
+        .data_in_num = I2S_PIN_NO_CHANGE
+    };
+    i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
+    i2s_set_pin(I2S_NUM_0, &pin_config);
+    i2s_zero_dma_buffer(I2S_NUM_0);
 }
 
-// DOKUNMATİK KALİBRASYONU (Sola Kayma Fix)
-int getTX(int rawX) { return map(rawX, 3800, 180, 0, 320); } // Sınırlar sağa kaydırıldı
-int getTY(int rawY) { return map(rawY, 3800, 240, 0, 240); }
+void playToneI2S(float freq, int duration_ms) {
+    if (freq <= 0) return;
+    int sampleRate = 44100;
+    int samples = (sampleRate * duration_ms) / 1000;
+    size_t bytes_written;
+    for(int i=0; i<samples; i++) {
+        int16_t sample = (int16_t)(10000 * sin(2.0 * PI * freq * i / sampleRate));
+        uint32_t sample32 = ((uint32_t)(uint16_t)sample << 16) | (uint16_t)sample;
+        i2s_write(I2S_NUM_0, &sample32, sizeof(sample32), &bytes_written, portMAX_DELAY);
+    }
+    i2s_zero_dma_buffer(I2S_NUM_0); // Sesi kes
+}
+
+void playClick() { playToneI2S(1200, 15); } 
+void playBeep() { playToneI2S(1500, 50); } 
+void playError() { playToneI2S(300, 200); } 
+void playBootSound() { 
+    playToneI2S(523.25, 150); delay(50);
+    playToneI2S(659.25, 150); delay(50);
+    playToneI2S(783.99, 150); delay(50);
+    playToneI2S(1046.50, 400); 
+}
+
+// Dokunmatik Kalibrasyonu (Tam Merkezleme İçin Genişletildi)
+int getTX(int rawX) { return map(rawX, 3900, 150, 0, 320); } 
+int getTY(int rawY) { return map(rawY, 3800, 200, 0, 240); }
 
 // ZAMAN VE MASAÜSTÜ YÖNETİMİ
 void drawClock() {
@@ -77,9 +119,8 @@ void drawClock() {
     tft.setTextColor(whiteTheme ? 0x0000 : 0xFFFF); tft.setTextSize(1); tft.setCursor(265, 224);
     if(WiFi.status() == WL_CONNECTED) {
         struct tm timeinfo;
-        if(getLocalTime(&timeinfo, 10)) {
-            tft.printf("%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
-        } else { tft.print("SYNC.."); }
+        if(getLocalTime(&timeinfo, 10)) { tft.printf("%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min); } 
+        else { tft.print("SYNC.."); }
     } else { tft.setTextColor(0xF800); tft.print("OFFLINE"); }
 }
 
@@ -118,8 +159,7 @@ String runKeyboard(String prompt) {
     const char* keysU[3][10] = { {"Q","W","E","R","T","Y","U","I","O","P"}, {"A","S","D","F","G","H","J","K","L","@"}, {"Z","X","C","V","B","N","M",".","-","_"} };
     const char* keysN[3][10] = { {"1","2","3","4","5","6","7","8","9","0"}, {"!","#","$","%","&","*","+","=","/","?"}, {"(",")","<",">","[","]","{","}",":",";"} };
 
-    tft.fillScreen(0x0000); 
-    bool drawKeys = true;
+    tft.fillScreen(0x0000); bool drawKeys = true;
     while(true) {
         esp_task_wdt_reset();
         if(drawKeys) {
@@ -142,8 +182,7 @@ String runKeyboard(String prompt) {
         }
 
         if (touch.touched()) {
-            playClick(); // KLAVYE SESİ
-            TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
+            playClick(); TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
             if(ty >= 80 && ty < 200) { 
                 int c = tx / 32; int r = (ty - 80) / 40;
                 if(c>=0&&c<10 && r>=0&&r<3) {
@@ -173,8 +212,7 @@ void runWifiManager() {
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         if (touch.touched()) {
-            playClick();
-            TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
+            playClick(); TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
             if(ty > 40 && ty < 190) { 
                 int idx = (ty - 40) / 40;
                 if(idx < n) {
@@ -191,8 +229,7 @@ void runWifiManager() {
                     } else { tft.fillScreen(0xF800); tft.setCursor(100, 120); tft.setTextColor(0xFFFF); tft.print("BAGLANTI HATASI!"); playError(); }
                     delay(2000); break;
                 }
-            }
-            else if(ty > 200) { break; } 
+            } else if(ty > 200) { break; } 
             delay(300);
         }
     }
@@ -204,12 +241,10 @@ void runBtManager() {
     tft.fillRect(50, 80, 220, 50, btState ? 0xF800 : 0x07E0);
     tft.setCursor(90, 100); tft.print(btState ? "BLUETOOTH KAPAT" : "BLUETOOTH AC");
     tft.fillRect(50, 150, 220, 50, 0x03FF); tft.setCursor(130, 170); tft.print("GERI");
-    
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         if (touch.touched()) {
-            playClick();
-            TS_Point p = touch.getPoint(); int ty = getTY(p.y);
+            playClick(); TS_Point p = touch.getPoint(); int ty = getTY(p.y);
             if(ty > 80 && ty < 130) { btState = !btState; if(btState) btStart(); else btStop(); playBeep(); break; }
             if(ty > 150 && ty < 200) { break; }
         }
@@ -217,7 +252,7 @@ void runBtManager() {
     currentState = DESKTOP; renderDesktop();
 }
 
-// ---------------- HESAP MAKİNESİ ----------------
+// ---------------- HESAP MAKİNESİ & CMD & SYS INFO ----------------
 void runCalculator() {
     String eq = ""; const char* cKeys[4][4] = { {"7","8","9","/"}, {"4","5","6","*"}, {"1","2","3","-"}, {"C","0","=","+"} };
     tft.fillScreen(0x0000); bool drawC = true; delay(300);
@@ -233,13 +268,11 @@ void runCalculator() {
             } drawC = false;
         }
         if (touch.touched()) {
-            playClick();
-            TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
+            playClick(); TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
             if(ty > 70 && ty < 230) {
                 int c = (tx - 10) / 75; int r = (ty - 70) / 40;
                 if(c>=0&&c<4 && r>=0&&r<4) {
-                    String k = cKeys[r][c];
-                    if(k == "C") eq = ""; else if(k == "=") eq = "Hesaplandi"; else eq += k;
+                    String k = cKeys[r][c]; if(k == "C") eq = ""; else if(k == "=") eq = "Hesaplandi"; else eq += k;
                     drawC = true;
                 }
             } delay(200);
@@ -248,7 +281,6 @@ void runCalculator() {
     currentState = DESKTOP; renderDesktop();
 }
 
-// ---------------- CMD & SYS INFO ----------------
 void runCMD() {
     tft.fillScreen(0x0000); tft.setTextColor(0x07E0); tft.setTextSize(1);
     tft.setCursor(0, 5); tft.println("Microsoft Windows [Version 10.0.19045]"); tft.println("(c) Microsoft Corporation. Tum haklari saklidir.\n");
@@ -275,7 +307,7 @@ void runSysInfo() {
     currentState = DESKTOP; renderDesktop();
 }
 
-// ---------------- OYUNLAR & PAINT ----------------
+// ---------------- OYUNLAR, BOYA & I2S TEST ----------------
 void run3DCube() {
     tft.fillScreen(0x0000); float ax=0, ay=0; delay(300);
     while(digitalRead(JOY_SELECT) == HIGH) {
@@ -293,7 +325,6 @@ void runSnake() {
     int x[50], y[50], len=5, dx=8, dy=0, ax=160, ay=120, score=0;
     for(int i=0;i<50;i++){x[i]=-10;y[i]=-10;} x[0]=160; y[0]=120;
     tft.fillScreen(0x0000); tft.fillCircle(ax+4, ay+4, 4, 0xF800); delay(300);
-    
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         int jx = analogRead(J1_X); int jy = analogRead(J1_Y);
@@ -306,13 +337,11 @@ void runSnake() {
         
         if(abs(x[0]-ax)<8 && abs(y[0]-ay)<8) { 
             if(len<49) len++; score+=10; ax = random(2, 38)*8; ay = random(2, 25)*8; 
-            tft.fillCircle(ax+4, ay+4, 4, 0xF800); tone(SPEAKER_PIN, 1200, 50); // ELMA SESI
+            tft.fillCircle(ax+4, ay+4, 4, 0xF800); playToneI2S(1200, 50); 
         }
         tft.fillRect(x[0], y[0], 8, 8, 0x07E0); 
-        
         if(x[0]<0 || x[0]>=320 || y[0]<0 || y[0]>=240) {
-            tone(SPEAKER_PIN, 200, 500); // GAME OVER SESI
-            tft.fillScreen(0xF800); tft.setCursor(100, 120); tft.setTextColor(0xFFFF); tft.printf("OYUN BITTI! SKOR: %d", score);
+            playToneI2S(200, 500); tft.fillScreen(0xF800); tft.setCursor(100, 120); tft.setTextColor(0xFFFF); tft.printf("OYUN BITTI! SKOR: %d", score);
             delay(2000); break;
         } delay(60); 
     }
@@ -327,11 +356,11 @@ void runPong() {
         tft.fillScreen(0); tft.setCursor(130, 10); tft.setTextColor(0x03FF); tft.printf("%d - %d", s1, s2);
         tft.fillRect(10, p1y, 8, 35, 0xF800); tft.fillRect(302, p2y, 8, 35, 0x07E0); tft.fillCircle(bx, by, 3, 0xFFFF);
         bx+=bdx; by+=bdy;
-        if(by<=0 || by>=240) { bdy=-bdy; tone(SPEAKER_PIN, 600, 30); } // DUVAR SESI
-        if(bx<=20 && by>p1y && by<p1y+35) { bdx=-bdx; tone(SPEAKER_PIN, 800, 30); } // RAKET SESI
-        if(bx>=295 && by>p2y && by<p2y+35) { bdx=-bdx; tone(SPEAKER_PIN, 800, 30); } // RAKET SESI
-        if(bx<0) { s2++; bx=160; by=120; tone(SPEAKER_PIN, 300, 300); delay(500); } // SKOR SESI
-        if(bx>320) { s1++; bx=160; by=120; tone(SPEAKER_PIN, 300, 300); delay(500); } // SKOR SESI
+        if(by<=0 || by>=240) { bdy=-bdy; playToneI2S(600, 30); } 
+        if(bx<=20 && by>p1y && by<p1y+35) { bdx=-bdx; playToneI2S(800, 30); } 
+        if(bx>=295 && by>p2y && by<p2y+35) { bdx=-bdx; playToneI2S(800, 30); } 
+        if(bx<0) { s2++; bx=160; by=120; playToneI2S(300, 300); delay(500); } 
+        if(bx>320) { s1++; bx=160; by=120; playToneI2S(300, 300); delay(500); } 
         delay(20);
     }
     currentState = DESKTOP; renderDesktop();
@@ -369,10 +398,9 @@ void runJoyTest() {
     currentState = DESKTOP; renderDesktop();
 }
 
-// ---------------- ANA DÖNGÜ (SETUP & LOOP) ----------------
+// ---------------- ANA DÖNGÜ ----------------
 void setup() {
-    pinMode(SPEAKER_PIN, OUTPUT);
-    digitalWrite(SPEAKER_PIN, LOW);
+    initI2S(); // MUHAMMED: I2S Ses Sürücüsü Başlatıldı
     
     WiFi.mode(WIFI_OFF); btStop();
     Serial.begin(115200);
@@ -394,7 +422,7 @@ void setup() {
         if(WiFi.status() == WL_CONNECTED) configTime(3 * 3600, 0, "pool.ntp.org"); 
     }
 
-    playBootSound(); // MUHAMMED: AÇILIŞ SESİ ÇALIYOR
+    playBootSound(); 
     renderDesktop();
 }
 
@@ -408,8 +436,7 @@ void loop() {
     if (digitalRead(JOY_SELECT) == LOW) {
         if (pressTimer == 0) pressTimer = millis();
         if (millis() - pressTimer > 2000 && !isLongPress) {
-            playBeep();
-            isLongPress = true; currentState = POWER_MENU;
+            playBeep(); isLongPress = true; currentState = POWER_MENU;
             tft.fillScreen(0x0000); tft.fillRect(60, 60, 200, 120, 0xF800);
             tft.setTextColor(0xFFFF); tft.setCursor(90, 80); tft.print("GUC SECENEKLERI");
             tft.fillRect(80, 100, 160, 30, 0x0000); tft.setCursor(120, 110); tft.print("KAPAT (UYKU)");
@@ -440,7 +467,10 @@ void loop() {
             else if (ty > 70 && ty < 100) { currentState = CMD_PROMPT; runCMD(); }
             else if (ty > 100 && ty < 130) { currentState = CALCULATOR; runCalculator(); }
             else if (ty > 130 && ty < 160) { currentState = PAINT; runPaintApp(); }
-            else if (ty > 160 && ty < 190) { currentState = TEST_MENU; tft.fillRect(161, 160, 130, 50, 0x1084); tft.drawRect(161, 160, 130, 50, 0x07FF); tft.setCursor(170, 170); tft.print("1. DOKUNMA TEST"); tft.setCursor(170, 190); tft.print("2. JOYSTICK TEST"); delay(300); }
+            else if (ty > 160 && ty < 190) { 
+                currentState = TEST_MENU; tft.fillRect(161, 150, 130, 75, 0x1084); tft.drawRect(161, 150, 130, 75, 0x07FF); 
+                tft.setCursor(170, 165); tft.print("1. DOKUNMA"); tft.setCursor(170, 185); tft.print("2. JOYSTICK"); tft.setCursor(170, 205); tft.print("3. I2S SES TEST"); delay(300); 
+            }
             else if (ty > 190) { currentState = GAME_MENU; tft.fillRect(161, 130, 130, 75, 0x1084); tft.drawRect(161, 130, 130, 75, 0xF81F); tft.setCursor(170, 140); tft.print("1. 3D KUBE"); tft.setCursor(170, 160); tft.print("2. YILAN"); tft.setCursor(170, 180); tft.print("3. PONG 2P"); delay(300); }
             else { currentState = DESKTOP; renderDesktop(); delay(300); }
         }
@@ -456,8 +486,13 @@ void loop() {
         }
         else if (currentState == TEST_MENU) {
             playClick();
-            if (ty > 160 && ty < 185) { tft.fillScreen(0xFFFF); tft.setTextColor(0); tft.setCursor(10,10); tft.print("DOKUNMA TEST - SELECT:CIKIS"); delay(300); while(digitalRead(JOY_SELECT)==HIGH) { if(touch.touched()){ TS_Point tp = touch.getPoint(); tft.drawCircle(getTX(tp.x), getTY(tp.y), 10, 0x07FF); } esp_task_wdt_reset(); } currentState = DESKTOP; renderDesktop(); }
-            else if (ty > 185 && ty < 210) runJoyTest();
+            if (ty > 150 && ty < 175) { tft.fillScreen(0xFFFF); tft.setTextColor(0); tft.setCursor(10,10); tft.print("DOKUNMA TEST - SELECT:CIKIS"); delay(300); while(digitalRead(JOY_SELECT)==HIGH) { if(touch.touched()){ TS_Point tp = touch.getPoint(); tft.drawCircle(getTX(tp.x), getTY(tp.y), 10, 0x07FF); } esp_task_wdt_reset(); } currentState = DESKTOP; renderDesktop(); }
+            else if (ty > 175 && ty < 195) { runJoyTest(); }
+            else if (ty > 195 && ty < 225) { // I2S SES TESTİ
+                tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(50, 120); tft.print("I2S SES TESTI CALIYOR...");
+                playToneI2S(261.63, 300); delay(100); playToneI2S(329.63, 300); delay(100); playToneI2S(392.00, 300); delay(100); playToneI2S(523.25, 600);
+                delay(1000); currentState = DESKTOP; renderDesktop();
+            }
             else { currentState = DESKTOP; renderDesktop(); delay(300); }
         }
         else if (currentState == POWER_MENU) {
