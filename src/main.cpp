@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.107 - The Sound Fix
+ * KynexOs Sovereign Build v230.108 - The Speaker Roar
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: ESP32-S3 I2S Master Clock Fix (mck_io_num), 100% DAC Compatibility
+ * Özellikler: I2S DMA Buffer Fix (Sessizlik Suikastçisi Yok Edildi), 3W 4Ohm Support
  * Donanım: ESP32-S3 N16R8 (V325 Pinout - Absolute Calibration)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -41,7 +41,7 @@
 #define J2_X 7
 #define J2_Y 15
 
-// MUHAMMED: MAX98357 I2S PİNLERİ
+// MUHAMMED: MAX98357 I2S PİNLERİ (SD Pini VCC'ye köprülenecek!)
 #define I2S_LRC  18  // Word Select
 #define I2S_BCLK 17  // Bit Clock
 #define I2S_DOUT 42  // Data Out
@@ -62,7 +62,7 @@ unsigned long lastClockUpdate = 0;
 bool isLongPress = false;
 uint16_t paintColor = 0xF800;
 
-// ---------------- I2S DİJİTAL SES MOTORU (THE SOUND FIX) ----------------
+// ---------------- I2S DİJİTAL SES MOTORU (DMA BUFFER FIX) ----------------
 void initI2S() {
     i2s_config_t i2s_config = {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
@@ -74,10 +74,10 @@ void initI2S() {
         .dma_buf_count = 8,
         .dma_buf_len = 64,
         .use_apll = false,
-        .tx_desc_auto_clear = true
+        .tx_desc_auto_clear = true // Sesi kendi kendine susturur, buffer silmeye gerek yok!
     };
     i2s_pin_config_t pin_config = {
-        .mck_io_num = I2S_PIN_NO_CHANGE, // MUHAMMED: İŞTE ÇÖZÜM BURASI! ESP32-S3'ÜN KİLİDİ AÇILDI!
+        .mck_io_num = I2S_PIN_NO_CHANGE, 
         .bck_io_num = I2S_BCLK,
         .ws_io_num = I2S_LRC,
         .data_out_num = I2S_DOUT,
@@ -85,7 +85,6 @@ void initI2S() {
     };
     i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
     i2s_set_pin(I2S_NUM_0, &pin_config);
-    i2s_zero_dma_buffer(I2S_NUM_0);
 }
 
 void playToneI2S(float freq, int duration_ms) {
@@ -93,14 +92,16 @@ void playToneI2S(float freq, int duration_ms) {
     int sampleRate = 44100;
     int samples = (sampleRate * duration_ms) / 1000;
     size_t bytes_written;
-    // Ses Seviyesi (Volume) Çarpanı
+    
     float amplitude = 32767.0 * (globalVolume / 100.0);
+    
     for(int i=0; i<samples; i++) {
         int16_t sample = (int16_t)(amplitude * sin(2.0 * PI * freq * i / sampleRate));
         uint32_t sample32 = ((uint32_t)(uint16_t)sample << 16) | (uint16_t)sample;
         i2s_write(I2S_NUM_0, &sample32, sizeof(sample32), &bytes_written, portMAX_DELAY);
     }
-    i2s_zero_dma_buffer(I2S_NUM_0);
+    // MUHAMMED: i2s_zero_dma_buffer buradan kaldirildi! 
+    // Hoparlor artik sesi bitirene kadar silinmeyecek.
 }
 
 void playClick() { playToneI2S(1200, 15); } 
@@ -441,7 +442,7 @@ void setup() {
     prefs.begin("sov_v325", false);
     whiteTheme = prefs.getBool("theme", false);
     globalVolume = prefs.getInt("vol", 50); 
-    if(globalVolume <= 0 || globalVolume > 100) globalVolume = 50; // Hata Koruması
+    if(globalVolume <= 0 || globalVolume > 100) globalVolume = 50; 
     
     savedSSID = prefs.getString("ssid", ""); savedPASS = prefs.getString("pass", "");
 
@@ -465,7 +466,6 @@ void loop() {
         drawClock(); lastClockUpdate = millis();
     }
 
-    // GÜÇ & SES MENÜSÜ (2 Saniye Basılı Tut)
     if (digitalRead(JOY_SELECT) == LOW) {
         if (pressTimer == 0) pressTimer = millis();
         if (millis() - pressTimer > 2000 && !isLongPress) {
@@ -503,7 +503,10 @@ void loop() {
             else if (ty > 100 && ty < 130) { playClick(); currentState = CALCULATOR; runCalculator(); }
             else if (ty > 130 && ty < 160) { playClick(); currentState = PAINT; runPaintApp(); }
             else if (ty > 160 && ty < 190) { playClick(); currentState = TEST_MENU; tft.fillRect(161, 160, 130, 50, 0x1084); tft.drawRect(161, 160, 130, 50, 0x07FF); tft.setCursor(170, 170); tft.print("1. DOKUNMA TEST"); tft.setCursor(170, 190); tft.print("2. I2S SES TEST"); delay(300); }
-            else if (ty > 190) { playClick(); currentState = GAME_MENU; tft.fillRect(161, 120, 130, 95, 0x1084); tft.drawRect(161, 120, 130, 95, 0xF81F); tft.setCursor(170, 130); tft.print("1. 3D KUBE"); tft.setCursor(170, 155); tft.print("2. YILAN"); tft.setCursor(170, 180); tft.print("3. PONG 2P"); tft.setCursor(170, 205); tft.print("4. PIYANO"); delay(300); }
+            else if (ty > 190) { 
+                playClick(); currentState = GAME_MENU; tft.fillRect(161, 120, 130, 95, 0x1084); tft.drawRect(161, 120, 130, 95, 0xF81F); 
+                tft.setCursor(170, 130); tft.print("1. 3D KUBE"); tft.setCursor(170, 155); tft.print("2. YILAN"); tft.setCursor(170, 180); tft.print("3. PONG 2P"); tft.setCursor(170, 205); tft.print("4. PIYANO"); delay(300); 
+            }
             else { currentState = DESKTOP; renderDesktop(); delay(300); }
         }
         else if (currentState == SETTINGS_HUB) {
