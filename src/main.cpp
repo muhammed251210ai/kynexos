@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.108 - The Speaker Roar
+ * KynexOs Sovereign Build v230.109 - The Hardware Unlock
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: I2S DMA Buffer Fix (Sessizlik Suikastçisi Yok Edildi), 3W 4Ohm Support
+ * Özellikler: JTAG Pin Lock Bypassed (GPIO 42 -> 21), True 3W Audio Enabled
  * Donanım: ESP32-S3 N16R8 (V325 Pinout - Absolute Calibration)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -41,10 +41,10 @@
 #define J2_X 7
 #define J2_Y 15
 
-// MUHAMMED: MAX98357 I2S PİNLERİ (SD Pini VCC'ye köprülenecek!)
+// MUHAMMED: MAX98357 I2S PİNLERİ (42 JTAG KİLİTLİ OLDUĞU İÇİN 21'E ALINDI!)
 #define I2S_LRC  18  // Word Select
 #define I2S_BCLK 17  // Bit Clock
-#define I2S_DOUT 42  // Data Out
+#define I2S_DOUT 21  // Data Out (42 YASAKLI PİN! KABLOYU 21'E TAK)
 
 Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
 XPT2046_Touchscreen touch(TOUCH_CS);
@@ -62,7 +62,7 @@ unsigned long lastClockUpdate = 0;
 bool isLongPress = false;
 uint16_t paintColor = 0xF800;
 
-// ---------------- I2S DİJİTAL SES MOTORU (DMA BUFFER FIX) ----------------
+// ---------------- I2S DİJİTAL SES MOTORU ----------------
 void initI2S() {
     i2s_config_t i2s_config = {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
@@ -74,7 +74,7 @@ void initI2S() {
         .dma_buf_count = 8,
         .dma_buf_len = 64,
         .use_apll = false,
-        .tx_desc_auto_clear = true // Sesi kendi kendine susturur, buffer silmeye gerek yok!
+        .tx_desc_auto_clear = true
     };
     i2s_pin_config_t pin_config = {
         .mck_io_num = I2S_PIN_NO_CHANGE, 
@@ -100,8 +100,6 @@ void playToneI2S(float freq, int duration_ms) {
         uint32_t sample32 = ((uint32_t)(uint16_t)sample << 16) | (uint16_t)sample;
         i2s_write(I2S_NUM_0, &sample32, sizeof(sample32), &bytes_written, portMAX_DELAY);
     }
-    // MUHAMMED: i2s_zero_dma_buffer buradan kaldirildi! 
-    // Hoparlor artik sesi bitirene kadar silinmeyecek.
 }
 
 void playClick() { playToneI2S(1200, 15); } 
@@ -206,7 +204,7 @@ String runKeyboard(String prompt) {
     }
 }
 
-// ---------------- AĞ VE BT ----------------
+// ---------------- AĞ VE BLE ----------------
 void runWifiManager() {
     tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(10, 10); tft.print("WIFI AGLARI TARANIYOR...");
     WiFi.mode(WIFI_STA); int n = WiFi.scanNetworks();
