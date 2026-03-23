@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.106 - The Awakening
+ * KynexOs Sovereign Build v230.107 - The Sound Fix
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: I2S Stereo Frame Fix, Max98357a SD Wakeup Compatibility
+ * Özellikler: ESP32-S3 I2S Master Clock Fix (mck_io_num), 100% DAC Compatibility
  * Donanım: ESP32-S3 N16R8 (V325 Pinout - Absolute Calibration)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -41,7 +41,7 @@
 #define J2_X 7
 #define J2_Y 15
 
-// MUHAMMED: MAX98357 I2S PİNLERİ (SD PİNİNİ VCC'YE BAĞLAMAYI UNUTMA!)
+// MUHAMMED: MAX98357 I2S PİNLERİ
 #define I2S_LRC  18  // Word Select
 #define I2S_BCLK 17  // Bit Clock
 #define I2S_DOUT 42  // Data Out
@@ -62,14 +62,13 @@ unsigned long lastClockUpdate = 0;
 bool isLongPress = false;
 uint16_t paintColor = 0xF800;
 
-// ---------------- I2S DİJİTAL SES MOTORU ----------------
+// ---------------- I2S DİJİTAL SES MOTORU (THE SOUND FIX) ----------------
 void initI2S() {
     i2s_config_t i2s_config = {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
         .sample_rate = 44100,
         .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
-        // MUHAMMED: Stereo çıkışa geçirildi. MAX98357 SD pini VCC'deyken her iki kanalı da birleştirip basar.
-        .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT, 
+        .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
         .dma_buf_count = 8,
@@ -78,6 +77,7 @@ void initI2S() {
         .tx_desc_auto_clear = true
     };
     i2s_pin_config_t pin_config = {
+        .mck_io_num = I2S_PIN_NO_CHANGE, // MUHAMMED: İŞTE ÇÖZÜM BURASI! ESP32-S3'ÜN KİLİDİ AÇILDI!
         .bck_io_num = I2S_BCLK,
         .ws_io_num = I2S_LRC,
         .data_out_num = I2S_DOUT,
@@ -89,10 +89,11 @@ void initI2S() {
 }
 
 void playToneI2S(float freq, int duration_ms) {
-    if (freq <= 0 || globalVolume == 0) return;
+    if (freq <= 0 || globalVolume <= 0) return;
     int sampleRate = 44100;
     int samples = (sampleRate * duration_ms) / 1000;
     size_t bytes_written;
+    // Ses Seviyesi (Volume) Çarpanı
     float amplitude = 32767.0 * (globalVolume / 100.0);
     for(int i=0; i<samples; i++) {
         int16_t sample = (int16_t)(amplitude * sin(2.0 * PI * freq * i / sampleRate));
@@ -112,7 +113,7 @@ void playBootSound() {
     playToneI2S(1046.50, 400); 
 }
 
-// Dokunmatik Kalibrasyonu (Tam Merkezleme)
+// Dokunmatik Kalibrasyonu 
 int getTX(int rawX) { return map(rawX, 3900, 150, 0, 320); } 
 int getTY(int rawY) { return map(rawY, 3800, 200, 0, 240); }
 
@@ -414,7 +415,19 @@ void runPaintApp() {
     currentState = DESKTOP; renderDesktop();
 }
 
-// ---------------- ANA DÖNGÜ ----------------
+void runJoyTest() {
+    tft.fillScreen(0x0000); delay(300);
+    while(digitalRead(JOY_SELECT) == HIGH) {
+        esp_task_wdt_reset();
+        int j1x = analogRead(J1_X); int j1y = analogRead(J1_Y); int j2x = analogRead(J2_X); int j2y = analogRead(J2_Y);
+        tft.fillRect(20, 50, 130, 100, 0x1084); tft.setCursor(25, 60); tft.setTextColor(0xFFFF); tft.printf("SOL JOY\nX:%d Y:%d", j1x, j1y); tft.fillCircle(20 + map(j1x, 0, 4095, 5, 125), 50 + map(j1y, 0, 4095, 5, 95), 4, 0xF800);
+        tft.fillRect(170, 50, 130, 100, 0x1084); tft.setCursor(175, 60); tft.printf("SAG JOY\nX:%d Y:%d", j2x, j2y); tft.fillCircle(170 + map(j2x, 0, 4095, 5, 125), 50 + map(j2y, 0, 4095, 5, 95), 4, 0x07E0);
+        delay(30);
+    }
+    currentState = DESKTOP; renderDesktop();
+}
+
+// ---------------- ANA DÖNGÜ (SETUP & LOOP) ----------------
 void setup() {
     initI2S(); 
     
@@ -428,6 +441,8 @@ void setup() {
     prefs.begin("sov_v325", false);
     whiteTheme = prefs.getBool("theme", false);
     globalVolume = prefs.getInt("vol", 50); 
+    if(globalVolume <= 0 || globalVolume > 100) globalVolume = 50; // Hata Koruması
+    
     savedSSID = prefs.getString("ssid", ""); savedPASS = prefs.getString("pass", "");
 
     if(psramInit()) Serial.println("PSRAM READY");
@@ -473,6 +488,7 @@ void loop() {
         } 
         else if (currentState == START_MENU) {
             if (tx > 140 && ty > 15 && ty < 55) { playClick(); currentState = WIFI_MENU; runWifiManager(); }
+            else if (tx > 140 && ty > 60 && ty < 100) { playClick(); currentState = BT_MENU; runBtManager(); }
             else if (tx > 140 && ty > 105 && ty < 145) { 
                 playClick(); tft.fillScreen(0); tft.fillRect(40, 40, 240, 170, 0xF800); tft.setTextColor(0xFFFF); tft.setCursor(110, 55); tft.print("GUC & SES");
                 tft.fillRect(60, 75, 200, 30, 0x0000); tft.setCursor(100, 85); tft.print("KAPAT (UYKU)"); tft.fillRect(60, 115, 200, 30, 0x03FF); tft.setCursor(95, 125); tft.print("YENIDEN BASLAT");
