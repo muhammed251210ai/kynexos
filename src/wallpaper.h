@@ -1,5 +1,6 @@
-/* * Sovereign Wallpaper Engine - The Multimedia Core v230.103
+/* * Sovereign Wallpaper Engine - The Hi-Fi Core v230.104
  * Geliştirici: Muhammed (Kynex)
+ * Özellikler: Orijinal 3D Perspektifli Windows 10 Logosu (Matematiksel Çizim)
  */
 
 #ifndef WALLPAPER_H
