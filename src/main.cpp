@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.111 - The DMA Fix
+ * KynexOs Sovereign Build v230.112 - The Final Resonance
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: ESP32-S3 I2S DMA Buffer Size Fix (64->1024), Clock Override
+ * Özellikler: Aggressive I2S Driver, Auto-Clear Disabled, Hardware Defibrillator
  * Donanım: ESP32-S3 N16R8 (V325 Pinout - Absolute Calibration)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -41,7 +41,7 @@
 #define J2_X 7
 #define J2_Y 15
 
-// MUHAMMED: MAX98357 I2S PİNLERİ 
+// MUHAMMED: MAX98357 I2S PİNLERİ (21 Numaralı Pin)
 #define I2S_LRC  18  // Word Select
 #define I2S_BCLK 17  // Bit Clock
 #define I2S_DOUT 21  // Data Out 
@@ -62,7 +62,7 @@ unsigned long lastClockUpdate = 0;
 bool isLongPress = false;
 uint16_t paintColor = 0xF800;
 
-// ---------------- I2S DİJİTAL SES MOTORU (DMA FIX) ----------------
+// ---------------- I2S DİJİTAL SES MOTORU (ŞOK CİHAZI MODU) ----------------
 void initI2S() {
     i2s_config_t i2s_config = {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
@@ -71,11 +71,10 @@ void initI2S() {
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-        // MUHAMMED: İŞTE ÇÖZÜM BURADA! ESP32-S3 DMA Buffer çökmesi engellendi.
-        .dma_buf_count = 16, 
+        .dma_buf_count = 8, 
         .dma_buf_len = 1024, 
         .use_apll = false,
-        .tx_desc_auto_clear = true
+        .tx_desc_auto_clear = false // MUHAMMED: İŞLEMCİ ARTIK SESİ KESEMEZ!
     };
     i2s_pin_config_t pin_config = {
         .mck_io_num = I2S_PIN_NO_CHANGE, 
@@ -86,8 +85,6 @@ void initI2S() {
     };
     i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
     i2s_set_pin(I2S_NUM_0, &pin_config);
-    // Saat hızını I2S motoruna zorla kabul ettir
-    i2s_set_clk(I2S_NUM_0, 44100, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_STEREO);
 }
 
 void playToneI2S(float freq, int duration_ms) {
@@ -95,21 +92,24 @@ void playToneI2S(float freq, int duration_ms) {
     int sampleRate = 44100;
     int samples = (sampleRate * duration_ms) / 1000;
     size_t bytes_written;
+    
+    // Genlik (Volume) Zorlaması!
     float amplitude = 32767.0 * (globalVolume / 100.0);
+    
     for(int i=0; i<samples; i++) {
         int16_t sample = (int16_t)(amplitude * sin(2.0 * PI * freq * i / sampleRate));
         uint32_t sample32 = ((uint32_t)(uint16_t)sample << 16) | (uint16_t)sample;
         i2s_write(I2S_NUM_0, &sample32, sizeof(sample32), &bytes_written, portMAX_DELAY);
     }
+    i2s_zero_dma_buffer(I2S_NUM_0); // Sesi iş bittikten sonra manuel kes!
 }
 
-// Yüksek Sesli Kare Dalga Testi (Volume Ayarını Ezer!)
 void playSquareWaveI2S(float freq, int duration_ms) {
     if (freq <= 0) return;
     int sampleRate = 44100;
     int samples = (sampleRate * duration_ms) / 1000;
     size_t bytes_written;
-    float amplitude = 32767.0; // MUHAMMED: SES %100'E ZORLANDI!
+    float amplitude = 32767.0; // %100 KABA KUVVET SES
     int half_period = sampleRate / (freq * 2);
     
     for(int i=0; i<samples; i++) {
@@ -117,6 +117,7 @@ void playSquareWaveI2S(float freq, int duration_ms) {
         uint32_t sample32 = ((uint32_t)(uint16_t)sample << 16) | (uint16_t)sample;
         i2s_write(I2S_NUM_0, &sample32, sizeof(sample32), &bytes_written, portMAX_DELAY);
     }
+    i2s_zero_dma_buffer(I2S_NUM_0);
 }
 
 void playClick() { playToneI2S(1200, 15); } 
@@ -539,7 +540,7 @@ void loop() {
             if (ty > 150 && ty < 175) { tft.fillScreen(0xFFFF); tft.setTextColor(0); tft.setCursor(10,10); tft.print("DOKUNMA TEST - SELECT:CIKIS"); delay(300); while(digitalRead(JOY_SELECT)==HIGH) { if(touch.touched()){ TS_Point tp = touch.getPoint(); tft.drawCircle(getTX(tp.x), getTY(tp.y), 10, 0x07FF); } esp_task_wdt_reset(); } currentState = DESKTOP; renderDesktop(); }
             else if (ty > 175 && ty < 195) { 
                 tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(50, 120); tft.print("I2S KARE DALGA TESTI...");
-                playSquareWaveI2S(440, 1000); // LOUD TEST!
+                playSquareWaveI2S(440, 1000); // MUHAMMED: KABA KUVVET ALARMI! (TEST MENÜSÜNDEN BAS)
                 delay(1000); currentState = DESKTOP; renderDesktop();
             }
             else { currentState = DESKTOP; renderDesktop(); delay(300); }
@@ -552,7 +553,7 @@ void loop() {
                 tft.fillRect(85, 160, 170, 20, 0x0000); 
                 tft.fillRect(85, 160, (globalVolume*170)/100, 20, 0x07E0); 
                 tft.drawRect(85, 160, 170, 20, 0xFFFF);
-                playSquareWaveI2S(1000, 100); // Bıraktığında o ses tonunda öter!
+                playSquareWaveI2S(1000, 100); 
                 delay(100);
             }
             else if (tx > 60 && tx < 260 && ty > 75 && ty < 105) { playClick(); tft.fillScreen(0); tft.setCursor(100,120); tft.print("UYKU MODU..."); delay(1000); esp_deep_sleep_start(); }
