@@ -1,5 +1,6 @@
-/* * Sovereign Wallpaper Engine - The Investigator v230.113
+/* * Sovereign Wallpaper Engine - v230.116
  * Geliştirici: Muhammed (Kynex)
+ * Özellikler: Orijinal 3D Perspektifli Windows 10 Logosu
  */
 
 #ifndef WALLPAPER_H
