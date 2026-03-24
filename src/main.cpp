@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.110 - The Brute Force Diagnostic
+ * KynexOs Sovereign Build v230.111 - The DMA Fix
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Continuous Square Wave Alarm for Hardware Debugging, Pin 21 I2S
+ * Özellikler: ESP32-S3 I2S DMA Buffer Size Fix (64->1024), Clock Override
  * Donanım: ESP32-S3 N16R8 (V325 Pinout - Absolute Calibration)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -41,7 +41,7 @@
 #define J2_X 7
 #define J2_Y 15
 
-// MUHAMMED: MAX98357 I2S PİNLERİ (SD PİNİ KESİNLİKLE VCC'YE BAĞLI OLMALI!)
+// MUHAMMED: MAX98357 I2S PİNLERİ 
 #define I2S_LRC  18  // Word Select
 #define I2S_BCLK 17  // Bit Clock
 #define I2S_DOUT 21  // Data Out 
@@ -62,7 +62,7 @@ unsigned long lastClockUpdate = 0;
 bool isLongPress = false;
 uint16_t paintColor = 0xF800;
 
-// ---------------- I2S DİJİTAL SES MOTORU ----------------
+// ---------------- I2S DİJİTAL SES MOTORU (DMA FIX) ----------------
 void initI2S() {
     i2s_config_t i2s_config = {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
@@ -71,8 +71,9 @@ void initI2S() {
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-        .dma_buf_count = 8,
-        .dma_buf_len = 64,
+        // MUHAMMED: İŞTE ÇÖZÜM BURADA! ESP32-S3 DMA Buffer çökmesi engellendi.
+        .dma_buf_count = 16, 
+        .dma_buf_len = 1024, 
         .use_apll = false,
         .tx_desc_auto_clear = true
     };
@@ -85,6 +86,8 @@ void initI2S() {
     };
     i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
     i2s_set_pin(I2S_NUM_0, &pin_config);
+    // Saat hızını I2S motoruna zorla kabul ettir
+    i2s_set_clk(I2S_NUM_0, 44100, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_STEREO);
 }
 
 void playToneI2S(float freq, int duration_ms) {
@@ -100,13 +103,13 @@ void playToneI2S(float freq, int duration_ms) {
     }
 }
 
-// MUHAMMED: KABA KUVVET KARE DALGA TESTİ (Çok Yüksek Ses Çıkarır)
+// Yüksek Sesli Kare Dalga Testi (Volume Ayarını Ezer!)
 void playSquareWaveI2S(float freq, int duration_ms) {
-    if (freq <= 0 || globalVolume <= 0) return;
+    if (freq <= 0) return;
     int sampleRate = 44100;
     int samples = (sampleRate * duration_ms) / 1000;
     size_t bytes_written;
-    float amplitude = 32767.0 * (globalVolume / 100.0);
+    float amplitude = 32767.0; // MUHAMMED: SES %100'E ZORLANDI!
     int half_period = sampleRate / (freq * 2);
     
     for(int i=0; i<samples; i++) {
@@ -535,8 +538,8 @@ void loop() {
             playClick();
             if (ty > 150 && ty < 175) { tft.fillScreen(0xFFFF); tft.setTextColor(0); tft.setCursor(10,10); tft.print("DOKUNMA TEST - SELECT:CIKIS"); delay(300); while(digitalRead(JOY_SELECT)==HIGH) { if(touch.touched()){ TS_Point tp = touch.getPoint(); tft.drawCircle(getTX(tp.x), getTY(tp.y), 10, 0x07FF); } esp_task_wdt_reset(); } currentState = DESKTOP; renderDesktop(); }
             else if (ty > 175 && ty < 195) { 
-                tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(50, 120); tft.print("I2S KARE DALGA TESTI");
-                playSquareWaveI2S(440, 1000); // LOUD TEST
+                tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(50, 120); tft.print("I2S KARE DALGA TESTI...");
+                playSquareWaveI2S(440, 1000); // LOUD TEST!
                 delay(1000); currentState = DESKTOP; renderDesktop();
             }
             else { currentState = DESKTOP; renderDesktop(); delay(300); }
@@ -549,7 +552,7 @@ void loop() {
                 tft.fillRect(85, 160, 170, 20, 0x0000); 
                 tft.fillRect(85, 160, (globalVolume*170)/100, 20, 0x07E0); 
                 tft.drawRect(85, 160, 170, 20, 0xFFFF);
-                playSquareWaveI2S(1000, 100); // LOUD FEEDBACK
+                playSquareWaveI2S(1000, 100); // Bıraktığında o ses tonunda öter!
                 delay(100);
             }
             else if (tx > 60 && tx < 260 && ty > 75 && ty < 105) { playClick(); tft.fillScreen(0); tft.setCursor(100,120); tft.print("UYKU MODU..."); delay(1000); esp_deep_sleep_start(); }
