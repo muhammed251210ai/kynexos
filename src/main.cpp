@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.118 - THE REFINED UI
+ * KynexOs Sovereign Build v230.119 - THE PARTITION MASTER
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Power Menu Back Button, Sine Wave Volume Feedback (No Crackle)
+ * Özellikler: Absolute Flash Address Booting (0x410000), Safe Transition
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -339,7 +339,7 @@ void runSysInfo() {
     currentState = DESKTOP; renderDesktop();
 }
 
-// ---------------- OYUNLAR, BOYA, PİYANO ----------------
+// ---------------- OYUNLAR, BOYA, PİYANO VE TESTLER ----------------
 void runPianoApp() {
     tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(10, 10); tft.print("PIYANO - SELECT TUSU CIKIS");
     for(int i=0; i<8; i++) tft.fillRect(i*40, 40, 38, 200, 0xFFFF); 
@@ -356,7 +356,7 @@ void runPianoApp() {
                 float freqs[] = {261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25}; 
                 if(key>=0 && key<8) {
                     tft.fillRect(key*40, 180, 38, 60, 0x07FF); 
-                    playToneI2S(freqs[key], 150); // MUHAMMED: Artik pürüzsüz sinus calar!
+                    playToneI2S(freqs[key], 150); 
                     tft.fillRect(key*40, 180, 38, 60, 0xFFFF); 
                 }
             }
@@ -455,10 +455,42 @@ void runJoyTest() {
     currentState = DESKTOP; renderDesktop();
 }
 
+// ---------------- RETRO-GO ABSOLUTE BOOTLOADER ----------------
+void bootToRetroGo() {
+    tft.fillScreen(0x0000); tft.setTextColor(0x07E0); tft.setTextSize(2); tft.setCursor(20, 110); 
+    tft.print("RETRO-GO YUKLENIYOR..");
+    
+    // MUHAMMED: SADECE 0x410000 ADRESINE ODAKLAN!
+    esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, NULL);
+    const esp_partition_t* target = NULL;
+    while (it != NULL) {
+        const esp_partition_t* part = esp_partition_get(it);
+        if (part->address == 0x410000) {
+            target = part;
+            break;
+        }
+        it = esp_partition_next(it);
+    }
+    esp_partition_iterator_release(it);
+    
+    if (target != NULL) {
+        Serial.printf("[SYSTEM] 0x410000 Adresine Geciliyor...\n");
+        esp_ota_set_boot_partition(target);
+        delay(200);
+        ESP.restart();
+    } else {
+        tft.fillScreen(0xF800); tft.setTextColor(0xFFFF); tft.setTextSize(1); tft.setCursor(20, 120); 
+        tft.print("HATA: 0x410000 ADRESINDE PARTITION YOK!");
+        Serial.println("[HATA] 0x410000 partition bulunamadi.");
+        delay(3000);
+        currentState = DESKTOP; renderDesktop();
+    }
+}
+
 // ---------------- ANA DÖNGÜ (SETUP & LOOP) ----------------
 void setup() {
     Serial.begin(115200);
-    Serial.println("\n*** Sovereign OS v230.118 - THE REFINED UI ***");
+    Serial.println("\n*** Sovereign OS v230.119 - THE PARTITION MASTER ***");
     
     initI2S(); 
     
@@ -496,19 +528,18 @@ void loop() {
         drawClock(); lastClockUpdate = millis();
     }
 
-    // GÜÇ & SES MENÜSÜ (2 Saniye Basılı Tut) - YENİ TASARIM
     if (digitalRead(JOY_SELECT) == LOW) {
         if (pressTimer == 0) pressTimer = millis();
         if (millis() - pressTimer > 2000 && !isLongPress) {
             playBeep(); isLongPress = true; currentState = POWER_MENU;
             tft.fillScreen(0x0000); 
-            tft.fillRect(30, 20, 260, 200, 0xF800); // Kutu Genişletildi
+            tft.fillRect(30, 20, 260, 200, 0xF800); 
             tft.setTextColor(0xFFFF); tft.setCursor(110, 35); tft.print("GUC & SES");
             tft.fillRect(50, 55, 220, 30, 0x0000); tft.setCursor(100, 65); tft.print("KAPAT (UYKU)");
             tft.fillRect(50, 95, 220, 30, 0x03FF); tft.setCursor(95, 105); tft.print("YENIDEN BASLAT");
             tft.setCursor(40, 145); tft.print("SES:");
             tft.drawRect(85, 140, 170, 20, 0xFFFF); tft.fillRect(85, 140, (globalVolume*170)/100, 20, 0x07E0);
-            tft.fillRect(50, 175, 220, 30, 0x10A2); tft.setCursor(140, 185); tft.print("GERI"); // YENİ BUTON
+            tft.fillRect(50, 175, 220, 30, 0x10A2); tft.setCursor(140, 185); tft.print("GERI"); 
             delay(500);
         }
     } else { pressTimer = 0; isLongPress = false; }
@@ -534,7 +565,8 @@ void loop() {
                 tft.fillRect(50, 175, 220, 30, 0x10A2); tft.setCursor(140, 185); tft.print("GERI"); 
                 delay(300);
             }
-            else if (tx > 140 && ty > 150) { playClick(); const esp_partition_t* target = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, "retrogo"); if (target) { esp_ota_set_boot_partition(target); ESP.restart(); } }
+            // MUHAMMED: RETRO-GO'YU BAŞLATAN YENİ KOMUT
+            else if (tx > 140 && ty > 150) { playClick(); bootToRetroGo(); }
             
             else if (ty > 15 && ty < 40) { playClick(); currentState = SETTINGS_HUB; tft.fillScreen(whiteTheme?0xFFFF:0); tft.fillRect(50, 80, 220, 50, 0x07FF); tft.setTextColor(0xFFFF); tft.setCursor(100, 100); tft.print("TEMA DEGISTIR"); tft.fillRect(50, 150, 220, 50, 0x07E0); tft.setCursor(110, 170); tft.print("KAYDET VE CIK"); delay(300); }
             else if (ty > 40 && ty < 70) { playClick(); currentState = SYS_INFO; runSysInfo(); }
@@ -570,20 +602,19 @@ void loop() {
             else { currentState = DESKTOP; renderDesktop(); delay(300); }
         }
         else if (currentState == POWER_MENU) {
-            // YENİ MENÜ DOKUNMATİK KOORDİNATLARI
-            if (tx >= 85 && tx <= 255 && ty > 130 && ty < 165) { // SES BARI
+            if (tx >= 85 && tx <= 255 && ty > 130 && ty < 165) { 
                 globalVolume = ((tx - 85) * 100) / 170;
                 if(globalVolume < 0) globalVolume = 0; if(globalVolume > 100) globalVolume = 100;
                 prefs.putInt("vol", globalVolume); 
                 tft.fillRect(85, 140, 170, 20, 0x0000); 
                 tft.fillRect(85, 140, (globalVolume*170)/100, 20, 0x07E0); 
                 tft.drawRect(85, 140, 170, 20, 0xFFFF);
-                playToneI2S(1000, 50); // MUHAMMED: Artik cizirti yapmaz, saf sinus sesi verir!
+                playToneI2S(1000, 50); 
                 delay(100);
             }
             else if (tx > 50 && tx < 270 && ty > 55 && ty < 85) { playClick(); tft.fillScreen(0); tft.setCursor(100,120); tft.print("UYKU MODU..."); delay(1000); esp_deep_sleep_start(); }
             else if (tx > 50 && tx < 270 && ty > 95 && ty < 125) { playBeep(); ESP.restart(); }
-            else if (tx > 50 && tx < 270 && ty > 175 && ty < 205) { playClick(); currentState = DESKTOP; renderDesktop(); delay(300); } // GERİ BUTONU
+            else if (tx > 50 && tx < 270 && ty > 175 && ty < 205) { playClick(); currentState = DESKTOP; renderDesktop(); delay(300); }
             else if (tx < 30 || tx > 290 || ty < 20 || ty > 220) { currentState = DESKTOP; renderDesktop(); delay(300); } 
         }
     }
