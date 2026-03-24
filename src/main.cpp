@@ -1,8 +1,8 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.112 - The Final Resonance
+ * KynexOs Sovereign Build v230.113 - The Investigator
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Aggressive I2S Driver, Auto-Clear Disabled, Hardware Defibrillator
- * Donanım: ESP32-S3 N16R8 (V325 Pinout - Absolute Calibration)
+ * Özellikler: Deep Serial Logging, I2S Status Monitoring, Hardware Diagnostics
+ * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
  */
@@ -41,10 +41,10 @@
 #define J2_X 7
 #define J2_Y 15
 
-// MUHAMMED: MAX98357 I2S PİNLERİ (21 Numaralı Pin)
-#define I2S_LRC  18  // Word Select
-#define I2S_BCLK 17  // Bit Clock
-#define I2S_DOUT 21  // Data Out 
+// MUHAMMED: I2S PIN HARİTASI
+#define I2S_LRC  18
+#define I2S_BCLK 17
+#define I2S_DOUT 21 
 
 Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
 XPT2046_Touchscreen touch(TOUCH_CS);
@@ -62,8 +62,9 @@ unsigned long lastClockUpdate = 0;
 bool isLongPress = false;
 uint16_t paintColor = 0xF800;
 
-// ---------------- I2S DİJİTAL SES MOTORU (ŞOK CİHAZI MODU) ----------------
+// ---------------- DEDEKTİF MODU: I2S LOGLAMA ----------------
 void initI2S() {
+    Serial.println("[I2S] Baslatma dizisi basladi...");
     i2s_config_t i2s_config = {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
         .sample_rate = 44100,
@@ -74,7 +75,7 @@ void initI2S() {
         .dma_buf_count = 8, 
         .dma_buf_len = 1024, 
         .use_apll = false,
-        .tx_desc_auto_clear = false // MUHAMMED: İŞLEMCİ ARTIK SESİ KESEMEZ!
+        .tx_desc_auto_clear = false 
     };
     i2s_pin_config_t pin_config = {
         .mck_io_num = I2S_PIN_NO_CHANGE, 
@@ -83,17 +84,26 @@ void initI2S() {
         .data_out_num = I2S_DOUT,
         .data_in_num = I2S_PIN_NO_CHANGE
     };
-    i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
-    i2s_set_pin(I2S_NUM_0, &pin_config);
+    
+    esp_err_t err = i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
+    if (err != ESP_OK) { Serial.printf("[HATA] I2S Driver Yuklenemedi: %d\n", err); }
+    else { Serial.println("[OK] I2S Driver Yuklendi."); }
+
+    err = i2s_set_pin(I2S_NUM_0, &pin_config);
+    if (err != ESP_OK) { Serial.printf("[HATA] I2S Pinleri Atanamadi: %d\n", err); }
+    else { Serial.printf("[OK] I2S Pinleri Aktif: LRC=%d, BCLK=%d, DOUT=%d\n", I2S_LRC, I2S_BCLK, I2S_DOUT); }
+
+    i2s_set_clk(I2S_NUM_0, 44100, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_STEREO);
+    Serial.println("[I2S] Saat senkronizasyonu tamam.");
 }
 
 void playToneI2S(float freq, int duration_ms) {
     if (freq <= 0 || globalVolume <= 0) return;
+    Serial.printf("[AUDIO] Caliniyor: %.2f Hz, Sure: %d ms\n", freq, duration_ms);
+    
     int sampleRate = 44100;
     int samples = (sampleRate * duration_ms) / 1000;
     size_t bytes_written;
-    
-    // Genlik (Volume) Zorlaması!
     float amplitude = 32767.0 * (globalVolume / 100.0);
     
     for(int i=0; i<samples; i++) {
@@ -101,15 +111,17 @@ void playToneI2S(float freq, int duration_ms) {
         uint32_t sample32 = ((uint32_t)(uint16_t)sample << 16) | (uint16_t)sample;
         i2s_write(I2S_NUM_0, &sample32, sizeof(sample32), &bytes_written, portMAX_DELAY);
     }
-    i2s_zero_dma_buffer(I2S_NUM_0); // Sesi iş bittikten sonra manuel kes!
+    i2s_zero_dma_buffer(I2S_NUM_0);
+    Serial.println("[AUDIO] Veri akisi sonlandi.");
 }
 
 void playSquareWaveI2S(float freq, int duration_ms) {
     if (freq <= 0) return;
+    Serial.println("[TEST] BRUTE FORCE KARE DALGA BASLATILDI!");
     int sampleRate = 44100;
     int samples = (sampleRate * duration_ms) / 1000;
     size_t bytes_written;
-    float amplitude = 32767.0; // %100 KABA KUVVET SES
+    float amplitude = 32767.0; 
     int half_period = sampleRate / (freq * 2);
     
     for(int i=0; i<samples; i++) {
@@ -245,9 +257,10 @@ void runWifiManager() {
                     if(WiFi.status() == WL_CONNECTED) {
                         prefs.putString("ssid", selectedSSID); prefs.putString("pass", pass);
                         configTime(3 * 3600, 0, "pool.ntp.org"); 
-                        tft.fillScreen(0x07E0); tft.setCursor(100, 120); tft.setTextColor(0x0000); tft.print("WIFI BAGLANDI! SAAT GUNCEL.");
+                        tft.fillScreen(0x07E0); tft.setCursor(100, 120); tft.setTextColor(0x0000); tft.print("WIFI BAGLANDI!");
                         playBeep();
-                    } else { tft.fillScreen(0xF800); tft.setCursor(100, 120); tft.setTextColor(0xFFFF); tft.print("BAGLANTI HATASI!"); playError(); }
+                        Serial.printf("[WIFI] Baglandi! IP: %s\n", WiFi.localIP().toString().c_str());
+                    } else { tft.fillScreen(0xF800); tft.setCursor(100, 120); tft.setTextColor(0xFFFF); tft.print("BAGLANTI HATASI!"); playError(); Serial.println("[WIFI] Baglanti basarisiz."); }
                     delay(2000); break;
                 }
             } else if(ty > 200) { break; } 
@@ -446,10 +459,12 @@ void runJoyTest() {
 
 // ---------------- ANA DÖNGÜ (SETUP & LOOP) ----------------
 void setup() {
+    Serial.begin(115200);
+    Serial.println("\n*** Sovereign OS v230.113 - THE INVESTIGATOR ***");
+    
     initI2S(); 
     
     WiFi.mode(WIFI_OFF);
-    Serial.begin(115200);
     pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, HIGH);
     pinMode(JOY_SELECT, INPUT_PULLUP);
     SPI.begin(TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS);
@@ -462,13 +477,14 @@ void setup() {
     
     savedSSID = prefs.getString("ssid", ""); savedPASS = prefs.getString("pass", "");
 
-    if(psramInit()) Serial.println("PSRAM READY");
+    if(psramInit()) Serial.println("[SYSTEM] PSRAM Tespit Edildi ve Hazir.");
     esp_task_wdt_init(30, true);
 
     if(savedSSID != "") {
+        Serial.print("[WIFI] Kayitli aga baglaniliyor: "); Serial.println(savedSSID);
         WiFi.mode(WIFI_STA); WiFi.begin(savedSSID.c_str(), savedPASS.c_str());
         int timeout = 0; while (WiFi.status() != WL_CONNECTED && timeout < 15) { delay(300); timeout++; }
-        if(WiFi.status() == WL_CONNECTED) configTime(3 * 3600, 0, "pool.ntp.org"); 
+        if(WiFi.status() == WL_CONNECTED) { configTime(3 * 3600, 0, "pool.ntp.org"); Serial.println("[WIFI] NTP Zaman Senkronizasyonu basladi."); }
     }
 
     playBootSound(); 
@@ -539,8 +555,8 @@ void loop() {
             playClick();
             if (ty > 150 && ty < 175) { tft.fillScreen(0xFFFF); tft.setTextColor(0); tft.setCursor(10,10); tft.print("DOKUNMA TEST - SELECT:CIKIS"); delay(300); while(digitalRead(JOY_SELECT)==HIGH) { if(touch.touched()){ TS_Point tp = touch.getPoint(); tft.drawCircle(getTX(tp.x), getTY(tp.y), 10, 0x07FF); } esp_task_wdt_reset(); } currentState = DESKTOP; renderDesktop(); }
             else if (ty > 175 && ty < 195) { 
-                tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(50, 120); tft.print("I2S KARE DALGA TESTI...");
-                playSquareWaveI2S(440, 1000); // MUHAMMED: KABA KUVVET ALARMI! (TEST MENÜSÜNDEN BAS)
+                tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(50, 120); tft.print("I2S TESTI CALIYOR (SERIAL'A BAK!)");
+                playSquareWaveI2S(440, 1000); 
                 delay(1000); currentState = DESKTOP; renderDesktop();
             }
             else { currentState = DESKTOP; renderDesktop(); delay(300); }
