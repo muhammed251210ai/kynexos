@@ -1,4 +1,4 @@
-/* * Sovereign Wallpaper Engine - v230.116
+/* * Sovereign Wallpaper Engine - The Absolute Complete Core v230.117
  * Geliştirici: Muhammed (Kynex)
  * Özellikler: Orijinal 3D Perspektifli Windows 10 Logosu
  */
