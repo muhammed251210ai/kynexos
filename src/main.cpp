@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.119 - THE PARTITION MASTER
+ * KynexOs Sovereign Build v230.120 - THE JOKER'S GAMBIT
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Absolute Flash Address Booting (0x410000), Safe Transition
+ * Özellikler: Clown XOX Game, Zero-Clipping Audio Engine (No Crackle), Retro-Go Boot
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -41,7 +41,7 @@
 #define J2_X 7
 #define J2_Y 15
 
-// MUHAMMED: I2S PIN HARİTASI
+// I2S PIN HARİTASI
 #define I2S_LRC  18
 #define I2S_BCLK 17
 #define I2S_DOUT 5 
@@ -50,7 +50,7 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
 XPT2046_Touchscreen touch(TOUCH_CS);
 Preferences prefs;
 
-enum State { DESKTOP, START_MENU, SETTINGS_HUB, WIFI_MENU, BT_MENU, CMD_PROMPT, SYS_INFO, PAINT, TEST_MENU, GAME_MENU, CALCULATOR, POWER_MENU };
+enum State { DESKTOP, START_MENU, SETTINGS_HUB, WIFI_MENU, BT_MENU, CMD_PROMPT, SYS_INFO, PAINT, TEST_MENU, GAME_MENU, CALCULATOR, POWER_MENU, XOX_GAME };
 State currentState = DESKTOP;
 bool whiteTheme = false;
 bool btState = false;
@@ -62,7 +62,7 @@ unsigned long lastClockUpdate = 0;
 bool isLongPress = false;
 uint16_t paintColor = 0xF800;
 
-// ---------------- I2S LOGLAMA VE SİNÜS SES MOTORU ----------------
+// ---------------- I2S DİJİTAL SES MOTORU (SIFIR CIZIRTI MODU) ----------------
 void initI2S() {
     Serial.println("[I2S] Baslatma dizisi basladi...");
     i2s_config_t i2s_config = {
@@ -85,42 +85,33 @@ void initI2S() {
         .data_in_num = I2S_PIN_NO_CHANGE
     };
     
-    esp_err_t err = i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
-    if (err != ESP_OK) { Serial.printf("[HATA] I2S Driver Yuklenemedi: %d\n", err); }
-    else { Serial.println("[OK] I2S Driver Yuklendi."); }
-
-    err = i2s_set_pin(I2S_NUM_0, &pin_config);
-    if (err != ESP_OK) { Serial.printf("[HATA] I2S Pinleri Atanamadi: %d\n", err); }
-    else { Serial.printf("[OK] I2S Pinleri Aktif: LRC=%d, BCLK=%d, DOUT=%d\n", I2S_LRC, I2S_BCLK, I2S_DOUT); }
-
+    i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
+    i2s_set_pin(I2S_NUM_0, &pin_config);
     i2s_set_clk(I2S_NUM_0, 44100, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_STEREO);
-    Serial.println("[I2S] Saat senkronizasyonu tamam.");
 }
 
 void playToneI2S(float freq, int duration_ms) {
     if (freq <= 0 || globalVolume <= 0) return;
-    Serial.printf("[AUDIO] Caliniyor (Sinus): %.2f Hz, Sure: %d ms\n", freq, duration_ms);
-    
     int sampleRate = 44100;
     int samples = (sampleRate * duration_ms) / 1000;
     size_t bytes_written;
-    float amplitude = 32767.0 * (globalVolume / 100.0);
+    
+    // MUHAMMED: Dijital Kırpılmayı (Clipping/Cızırtı) önlemek için 32767 yerine 25000 kullanıyoruz.
+    float amplitude = 25000.0 * (globalVolume / 100.0);
     
     for(int i=0; i<samples; i++) {
         int16_t sample = (int16_t)(amplitude * sin(2.0 * PI * freq * i / sampleRate));
         uint32_t sample32 = ((uint32_t)(uint16_t)sample << 16) | (uint16_t)sample;
         i2s_write(I2S_NUM_0, &sample32, sizeof(sample32), &bytes_written, portMAX_DELAY);
     }
-    Serial.println("[AUDIO] Veri akisi sonlandi.");
 }
 
 void playSquareWaveI2S(float freq, int duration_ms) {
     if (freq <= 0) return;
-    Serial.println("[TEST] BRUTE FORCE KARE DALGA BASLATILDI!");
     int sampleRate = 44100;
     int samples = (sampleRate * duration_ms) / 1000;
     size_t bytes_written;
-    float amplitude = 32767.0 * (globalVolume / 100.0); 
+    float amplitude = 20000.0 * (globalVolume / 100.0); // Kaba kuvvet cızırtısı azaltıldı
     int half_period = sampleRate / (freq * 2);
     
     for(int i=0; i<samples; i++) {
@@ -257,8 +248,7 @@ void runWifiManager() {
                         configTime(3 * 3600, 0, "pool.ntp.org"); 
                         tft.fillScreen(0x07E0); tft.setCursor(100, 120); tft.setTextColor(0x0000); tft.print("WIFI BAGLANDI!");
                         playBeep();
-                        Serial.printf("[WIFI] Baglandi! IP: %s\n", WiFi.localIP().toString().c_str());
-                    } else { tft.fillScreen(0xF800); tft.setCursor(100, 120); tft.setTextColor(0xFFFF); tft.print("BAGLANTI HATASI!"); playError(); Serial.println("[WIFI] Baglanti basarisiz."); }
+                    } else { tft.fillScreen(0xF800); tft.setCursor(100, 120); tft.setTextColor(0xFFFF); tft.print("BAGLANTI HATASI!"); playError(); }
                     delay(2000); break;
                 }
             } else if(ty > 200) { break; } 
@@ -340,6 +330,95 @@ void runSysInfo() {
 }
 
 // ---------------- OYUNLAR, BOYA, PİYANO VE TESTLER ----------------
+
+// MUHAMMED: YENİ PALYAÇOLU XOX OYUNU (TIC-TAC-TOE)
+void runXOX() {
+    int board[9] = {0}; // 0: Boş, 1: X, 2: Palyaço
+    int turn = 1;
+    int winner = 0;
+    
+    tft.fillScreen(0x0000);
+    tft.setTextColor(0xFFFF); tft.setTextSize(1);
+    tft.setCursor(10, 10); tft.print("XOX - SELECT CIKIS");
+    
+    // 3x3 Tahtayı Çiz (Orta Boyut: 180x180, Kutular: 60x60)
+    tft.drawRect(70, 30, 180, 180, 0xFFFF);
+    tft.drawLine(130, 30, 130, 210, 0xFFFF); // Dikey 1
+    tft.drawLine(190, 30, 190, 210, 0xFFFF); // Dikey 2
+    tft.drawLine(70, 90, 250, 90, 0xFFFF);   // Yatay 1
+    tft.drawLine(70, 150, 250, 150, 0xFFFF); // Yatay 2
+    
+    delay(300);
+    while(digitalRead(JOY_SELECT) == HIGH) {
+        esp_task_wdt_reset();
+        if (touch.touched() && winner == 0) {
+            TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
+            
+            if (tx > 70 && tx < 250 && ty > 30 && ty < 210) {
+                int col = (tx - 70) / 60;
+                int row = (ty - 30) / 60;
+                int idx = row * 3 + col;
+                
+                if (board[idx] == 0) {
+                    board[idx] = turn;
+                    int cx = 70 + col * 60; // Kutunun X başlangıcı
+                    int cy = 30 + row * 60; // Kutunun Y başlangıcı
+                    
+                    if (turn == 1) {
+                        // X Çizimi
+                        tft.drawLine(cx + 10, cy + 10, cx + 50, cy + 50, 0x07E0);
+                        tft.drawLine(cx + 11, cy + 10, cx + 51, cy + 50, 0x07E0);
+                        tft.drawLine(cx + 50, cy + 10, cx + 10, cy + 50, 0x07E0);
+                        tft.drawLine(cx + 51, cy + 10, cx + 11, cy + 50, 0x07E0);
+                        playToneI2S(800, 50); // X Sesi
+                        turn = 2;
+                    } else {
+                        // PALYAÇO ÇİZİMİ (O Yerine)
+                        tft.fillCircle(cx+30, cy+30, 22, 0xFFE0); // Sarı/Beyaz Yüz
+                        tft.fillCircle(cx+10, cy+20, 10, 0x07FF); // Mavi Saç Sol
+                        tft.fillCircle(cx+50, cy+20, 10, 0x07FF); // Mavi Saç Sağ
+                        tft.fillCircle(cx+22, cy+25, 3, 0x0000);  // Göz Sol
+                        tft.fillCircle(cx+38, cy+25, 3, 0x0000);  // Göz Sağ
+                        tft.fillCircle(cx+30, cy+35, 6, 0xF800);  // Kırmızı Burun
+                        tft.drawLine(cx+20, cy+45, cx+40, cy+45, 0xF800); // Ağız Çizgisi
+                        tft.drawLine(cx+20, cy+45, cx+15, cy+40, 0xF800); // Gülümseme Sol
+                        tft.drawLine(cx+40, cy+45, cx+45, cy+40, 0xF800); // Gülümseme Sağ
+                        playToneI2S(1400, 50); // Palyaço Sesi
+                        turn = 1;
+                    }
+                    
+                    // Win Check
+                    int wins[8][3] = {{0,1,2},{3,4,5},{6,7,8},{0,3,6},{1,4,7},{2,5,8},{0,4,8},{2,4,6}};
+                    for(int i=0; i<8; i++) {
+                        if(board[wins[i][0]] != 0 && board[wins[i][0]] == board[wins[i][1]] && board[wins[i][1]] == board[wins[i][2]]) {
+                            winner = board[wins[i][0]];
+                            tft.setCursor(90, 10); tft.fillRect(90, 0, 230, 25, 0x0000);
+                            if(winner == 1) { tft.setTextColor(0x07E0); tft.print("X KAZANDI!"); }
+                            else { tft.setTextColor(0xF800); tft.print("PALYACO KAZANDI!"); }
+                            playToneI2S(winner == 1 ? 1200 : 600, 400); // Kazanma müziği
+                            break;
+                        }
+                    }
+                    
+                    // Beraberlik Kontrolü
+                    if(winner == 0) {
+                        bool full = true;
+                        for(int i=0; i<9; i++) if(board[i] == 0) full = false;
+                        if(full) {
+                            winner = 3;
+                            tft.setCursor(120, 10); tft.fillRect(90, 0, 230, 25, 0x0000);
+                            tft.setTextColor(0xFFFF); tft.print("BERABERE!");
+                            playToneI2S(400, 300);
+                        }
+                    }
+                }
+            }
+            delay(200);
+        }
+    }
+    currentState = DESKTOP; renderDesktop();
+}
+
 void runPianoApp() {
     tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(10, 10); tft.print("PIYANO - SELECT TUSU CIKIS");
     for(int i=0; i<8; i++) tft.fillRect(i*40, 40, 38, 200, 0xFFFF); 
@@ -460,38 +539,28 @@ void bootToRetroGo() {
     tft.fillScreen(0x0000); tft.setTextColor(0x07E0); tft.setTextSize(2); tft.setCursor(20, 110); 
     tft.print("RETRO-GO YUKLENIYOR..");
     
-    // MUHAMMED: SADECE 0x410000 ADRESINE ODAKLAN!
     esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, NULL);
     const esp_partition_t* target = NULL;
     while (it != NULL) {
         const esp_partition_t* part = esp_partition_get(it);
-        if (part->address == 0x410000) {
-            target = part;
-            break;
-        }
+        if (part->address == 0x410000) { target = part; break; }
         it = esp_partition_next(it);
     }
     esp_partition_iterator_release(it);
     
     if (target != NULL) {
-        Serial.printf("[SYSTEM] 0x410000 Adresine Geciliyor...\n");
         esp_ota_set_boot_partition(target);
-        delay(200);
-        ESP.restart();
+        delay(200); ESP.restart();
     } else {
         tft.fillScreen(0xF800); tft.setTextColor(0xFFFF); tft.setTextSize(1); tft.setCursor(20, 120); 
         tft.print("HATA: 0x410000 ADRESINDE PARTITION YOK!");
-        Serial.println("[HATA] 0x410000 partition bulunamadi.");
-        delay(3000);
-        currentState = DESKTOP; renderDesktop();
+        delay(3000); currentState = DESKTOP; renderDesktop();
     }
 }
 
 // ---------------- ANA DÖNGÜ (SETUP & LOOP) ----------------
 void setup() {
     Serial.begin(115200);
-    Serial.println("\n*** Sovereign OS v230.119 - THE PARTITION MASTER ***");
-    
     initI2S(); 
     
     WiFi.mode(WIFI_OFF);
@@ -507,14 +576,13 @@ void setup() {
     
     savedSSID = prefs.getString("ssid", ""); savedPASS = prefs.getString("pass", "");
 
-    if(psramInit()) Serial.println("[SYSTEM] PSRAM Tespit Edildi ve Hazir.");
+    if(psramInit()) Serial.println("[SYSTEM] PSRAM Tespit Edildi.");
     esp_task_wdt_init(30, true);
 
     if(savedSSID != "") {
-        Serial.print("[WIFI] Kayitli aga baglaniliyor: "); Serial.println(savedSSID);
         WiFi.mode(WIFI_STA); WiFi.begin(savedSSID.c_str(), savedPASS.c_str());
         int timeout = 0; while (WiFi.status() != WL_CONNECTED && timeout < 15) { delay(300); timeout++; }
-        if(WiFi.status() == WL_CONNECTED) { configTime(3 * 3600, 0, "pool.ntp.org"); Serial.println("[WIFI] NTP Zaman Senkronizasyonu basladi."); }
+        if(WiFi.status() == WL_CONNECTED) configTime(3 * 3600, 0, "pool.ntp.org"); 
     }
 
     playBootSound(); 
@@ -565,7 +633,6 @@ void loop() {
                 tft.fillRect(50, 175, 220, 30, 0x10A2); tft.setCursor(140, 185); tft.print("GERI"); 
                 delay(300);
             }
-            // MUHAMMED: RETRO-GO'YU BAŞLATAN YENİ KOMUT
             else if (tx > 140 && ty > 150) { playClick(); bootToRetroGo(); }
             
             else if (ty > 15 && ty < 40) { playClick(); currentState = SETTINGS_HUB; tft.fillScreen(whiteTheme?0xFFFF:0); tft.fillRect(50, 80, 220, 50, 0x07FF); tft.setTextColor(0xFFFF); tft.setCursor(100, 100); tft.print("TEMA DEGISTIR"); tft.fillRect(50, 150, 220, 50, 0x07E0); tft.setCursor(110, 170); tft.print("KAYDET VE CIK"); delay(300); }
@@ -575,8 +642,15 @@ void loop() {
             else if (ty > 130 && ty < 160) { playClick(); currentState = PAINT; runPaintApp(); }
             else if (ty > 160 && ty < 190) { playClick(); currentState = TEST_MENU; tft.fillRect(161, 150, 130, 75, 0x1084); tft.drawRect(161, 150, 130, 75, 0x07FF); tft.setCursor(170, 165); tft.print("1. DOKUNMA TEST"); tft.setCursor(170, 185); tft.print("2. JOYSTICK TEST"); tft.setCursor(170, 205); tft.print("3. I2S SES TEST"); delay(300); }
             else if (ty > 190) { 
-                playClick(); currentState = GAME_MENU; tft.fillRect(161, 120, 130, 95, 0x1084); tft.drawRect(161, 120, 130, 95, 0xF81F); 
-                tft.setCursor(170, 130); tft.print("1. 3D KUBE"); tft.setCursor(170, 155); tft.print("2. YILAN"); tft.setCursor(170, 180); tft.print("3. PONG 2P"); tft.setCursor(170, 205); tft.print("4. PIYANO"); delay(300); 
+                playClick(); currentState = GAME_MENU; 
+                tft.fillRect(161, 100, 130, 125, 0x1084); 
+                tft.drawRect(161, 100, 130, 125, 0xF81F); 
+                tft.setCursor(170, 110); tft.print("1. 3D KUBE"); 
+                tft.setCursor(170, 135); tft.print("2. YILAN"); 
+                tft.setCursor(170, 160); tft.print("3. PONG 2P"); 
+                tft.setCursor(170, 185); tft.print("4. PIYANO"); 
+                tft.setCursor(170, 210); tft.print("5. XOX OYUNU"); 
+                delay(300); 
             }
             else { currentState = DESKTOP; renderDesktop(); delay(300); }
         }
@@ -587,7 +661,11 @@ void loop() {
         }
         else if (currentState == GAME_MENU) {
             playClick();
-            if (ty > 120 && ty < 145) run3DCube(); else if (ty > 145 && ty < 170) runSnake(); else if (ty > 170 && ty < 195) runPong(); else if (ty > 195) runPianoApp();
+            if (ty > 100 && ty < 125) run3DCube(); 
+            else if (ty > 125 && ty < 150) runSnake(); 
+            else if (ty > 150 && ty < 175) runPong(); 
+            else if (ty > 175 && ty < 200) runPianoApp();
+            else if (ty > 200 && ty < 225) runXOX(); // PALYAÇO GÖREVE HAZIR!
             else { currentState = DESKTOP; renderDesktop(); delay(300); }
         }
         else if (currentState == TEST_MENU) {
@@ -595,8 +673,8 @@ void loop() {
             if (ty > 150 && ty < 175) { tft.fillScreen(0xFFFF); tft.setTextColor(0); tft.setCursor(10,10); tft.print("DOKUNMA TEST - SELECT:CIKIS"); delay(300); while(digitalRead(JOY_SELECT)==HIGH) { if(touch.touched()){ TS_Point tp = touch.getPoint(); tft.drawCircle(getTX(tp.x), getTY(tp.y), 10, 0x07FF); } esp_task_wdt_reset(); } currentState = DESKTOP; renderDesktop(); }
             else if (ty > 175 && ty < 195) { runJoyTest(); }
             else if (ty > 195 && ty < 225) { 
-                tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(50, 120); tft.print("I2S KARE DALGA TESTI...");
-                playSquareWaveI2S(440, 1000); 
+                tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(50, 120); tft.print("I2S SINUS SES TESTI...");
+                playToneI2S(440, 1000); // ARTIK CIZIRTI YOK, SİNÜS VAR
                 delay(1000); currentState = DESKTOP; renderDesktop();
             }
             else { currentState = DESKTOP; renderDesktop(); delay(300); }
@@ -609,7 +687,7 @@ void loop() {
                 tft.fillRect(85, 140, 170, 20, 0x0000); 
                 tft.fillRect(85, 140, (globalVolume*170)/100, 20, 0x07E0); 
                 tft.drawRect(85, 140, 170, 20, 0xFFFF);
-                playToneI2S(1000, 50); 
+                playToneI2S(1000, 50); // CIZIRTISIZ GERİ BİLDİRİM
                 delay(100);
             }
             else if (tx > 50 && tx < 270 && ty > 55 && ty < 85) { playClick(); tft.fillScreen(0); tft.setCursor(100,120); tft.print("UYKU MODU..."); delay(1000); esp_deep_sleep_start(); }
