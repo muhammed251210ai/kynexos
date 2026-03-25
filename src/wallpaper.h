@@ -1,4 +1,4 @@
-/* * Sovereign Wallpaper Engine - The Joker's Gambit v230.120
+/* * Sovereign Wallpaper Engine - The Conflict-Free Core v230.121
  * Geliştirici: Muhammed (Kynex)
  * Özellikler: Orijinal 3D Perspektifli Windows 10 Logosu
  */
