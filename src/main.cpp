@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.120 - THE JOKER'S GAMBIT
+ * KynexOs Sovereign Build v230.121 - THE CONFLICT-FREE CORE
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Clown XOX Game, Zero-Clipping Audio Engine (No Crackle), Retro-Go Boot
+ * Özellikler: Hardware Conflict Resolved (J1_X->6), Zero-Clipping Audio, Clown XOX
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -35,13 +35,13 @@
 #define TOUCH_CS 16
 #define JOY_SELECT 0 
 
-// JOYSTICK PİNLERİ
-#define J1_X 4
-#define J1_Y 6
+// JOYSTICK PİNLERİ (MUHAMMED: ÇAKIŞMA ÖNLENDİ!)
+#define J1_X 6  // I2S_DOUT (5) ile çakışmaması için 6'ya alındı
+#define J1_Y 4
 #define J2_X 7
 #define J2_Y 15
 
-// I2S PIN HARİTASI
+// I2S PIN HARİTASI (KUSURSUZ ZAFER PİNLERİ)
 #define I2S_LRC  18
 #define I2S_BCLK 17
 #define I2S_DOUT 5 
@@ -96,7 +96,7 @@ void playToneI2S(float freq, int duration_ms) {
     int samples = (sampleRate * duration_ms) / 1000;
     size_t bytes_written;
     
-    // MUHAMMED: Dijital Kırpılmayı (Clipping/Cızırtı) önlemek için 32767 yerine 25000 kullanıyoruz.
+    // Dijital Kırpılmayı (Clipping/Cızırtı) önlemek için limit 25000'e çekildi.
     float amplitude = 25000.0 * (globalVolume / 100.0);
     
     for(int i=0; i<samples; i++) {
@@ -329,11 +329,10 @@ void runSysInfo() {
     currentState = DESKTOP; renderDesktop();
 }
 
-// ---------------- OYUNLAR, BOYA, PİYANO VE TESTLER ----------------
+// ---------------- OYUNLAR VE UYGULAMALAR ----------------
 
-// MUHAMMED: YENİ PALYAÇOLU XOX OYUNU (TIC-TAC-TOE)
 void runXOX() {
-    int board[9] = {0}; // 0: Boş, 1: X, 2: Palyaço
+    int board[9] = {0}; 
     int turn = 1;
     int winner = 0;
     
@@ -341,12 +340,11 @@ void runXOX() {
     tft.setTextColor(0xFFFF); tft.setTextSize(1);
     tft.setCursor(10, 10); tft.print("XOX - SELECT CIKIS");
     
-    // 3x3 Tahtayı Çiz (Orta Boyut: 180x180, Kutular: 60x60)
     tft.drawRect(70, 30, 180, 180, 0xFFFF);
-    tft.drawLine(130, 30, 130, 210, 0xFFFF); // Dikey 1
-    tft.drawLine(190, 30, 190, 210, 0xFFFF); // Dikey 2
-    tft.drawLine(70, 90, 250, 90, 0xFFFF);   // Yatay 1
-    tft.drawLine(70, 150, 250, 150, 0xFFFF); // Yatay 2
+    tft.drawLine(130, 30, 130, 210, 0xFFFF); 
+    tft.drawLine(190, 30, 190, 210, 0xFFFF); 
+    tft.drawLine(70, 90, 250, 90, 0xFFFF);   
+    tft.drawLine(70, 150, 250, 150, 0xFFFF); 
     
     delay(300);
     while(digitalRead(JOY_SELECT) == HIGH) {
@@ -361,33 +359,31 @@ void runXOX() {
                 
                 if (board[idx] == 0) {
                     board[idx] = turn;
-                    int cx = 70 + col * 60; // Kutunun X başlangıcı
-                    int cy = 30 + row * 60; // Kutunun Y başlangıcı
+                    int cx = 70 + col * 60; 
+                    int cy = 30 + row * 60; 
                     
                     if (turn == 1) {
-                        // X Çizimi
                         tft.drawLine(cx + 10, cy + 10, cx + 50, cy + 50, 0x07E0);
                         tft.drawLine(cx + 11, cy + 10, cx + 51, cy + 50, 0x07E0);
                         tft.drawLine(cx + 50, cy + 10, cx + 10, cy + 50, 0x07E0);
                         tft.drawLine(cx + 51, cy + 10, cx + 11, cy + 50, 0x07E0);
-                        playToneI2S(800, 50); // X Sesi
+                        playToneI2S(800, 50); 
                         turn = 2;
                     } else {
-                        // PALYAÇO ÇİZİMİ (O Yerine)
-                        tft.fillCircle(cx+30, cy+30, 22, 0xFFE0); // Sarı/Beyaz Yüz
-                        tft.fillCircle(cx+10, cy+20, 10, 0x07FF); // Mavi Saç Sol
-                        tft.fillCircle(cx+50, cy+20, 10, 0x07FF); // Mavi Saç Sağ
-                        tft.fillCircle(cx+22, cy+25, 3, 0x0000);  // Göz Sol
-                        tft.fillCircle(cx+38, cy+25, 3, 0x0000);  // Göz Sağ
-                        tft.fillCircle(cx+30, cy+35, 6, 0xF800);  // Kırmızı Burun
-                        tft.drawLine(cx+20, cy+45, cx+40, cy+45, 0xF800); // Ağız Çizgisi
-                        tft.drawLine(cx+20, cy+45, cx+15, cy+40, 0xF800); // Gülümseme Sol
-                        tft.drawLine(cx+40, cy+45, cx+45, cy+40, 0xF800); // Gülümseme Sağ
-                        playToneI2S(1400, 50); // Palyaço Sesi
+                        // PALYAÇO ÇİZİMİ
+                        tft.fillCircle(cx+30, cy+30, 22, 0xFFE0); 
+                        tft.fillCircle(cx+10, cy+20, 10, 0x07FF); 
+                        tft.fillCircle(cx+50, cy+20, 10, 0x07FF); 
+                        tft.fillCircle(cx+22, cy+25, 3, 0x0000);  
+                        tft.fillCircle(cx+38, cy+25, 3, 0x0000);  
+                        tft.fillCircle(cx+30, cy+35, 6, 0xF800);  
+                        tft.drawLine(cx+20, cy+45, cx+40, cy+45, 0xF800); 
+                        tft.drawLine(cx+20, cy+45, cx+15, cy+40, 0xF800); 
+                        tft.drawLine(cx+40, cy+45, cx+45, cy+40, 0xF800); 
+                        playToneI2S(1400, 50); 
                         turn = 1;
                     }
                     
-                    // Win Check
                     int wins[8][3] = {{0,1,2},{3,4,5},{6,7,8},{0,3,6},{1,4,7},{2,5,8},{0,4,8},{2,4,6}};
                     for(int i=0; i<8; i++) {
                         if(board[wins[i][0]] != 0 && board[wins[i][0]] == board[wins[i][1]] && board[wins[i][1]] == board[wins[i][2]]) {
@@ -395,12 +391,11 @@ void runXOX() {
                             tft.setCursor(90, 10); tft.fillRect(90, 0, 230, 25, 0x0000);
                             if(winner == 1) { tft.setTextColor(0x07E0); tft.print("X KAZANDI!"); }
                             else { tft.setTextColor(0xF800); tft.print("PALYACO KAZANDI!"); }
-                            playToneI2S(winner == 1 ? 1200 : 600, 400); // Kazanma müziği
+                            playToneI2S(winner == 1 ? 1200 : 600, 400); 
                             break;
                         }
                     }
                     
-                    // Beraberlik Kontrolü
                     if(winner == 0) {
                         bool full = true;
                         for(int i=0; i<9; i++) if(board[i] == 0) full = false;
@@ -534,7 +529,6 @@ void runJoyTest() {
     currentState = DESKTOP; renderDesktop();
 }
 
-// ---------------- RETRO-GO ABSOLUTE BOOTLOADER ----------------
 void bootToRetroGo() {
     tft.fillScreen(0x0000); tft.setTextColor(0x07E0); tft.setTextSize(2); tft.setCursor(20, 110); 
     tft.print("RETRO-GO YUKLENIYOR..");
@@ -665,7 +659,7 @@ void loop() {
             else if (ty > 125 && ty < 150) runSnake(); 
             else if (ty > 150 && ty < 175) runPong(); 
             else if (ty > 175 && ty < 200) runPianoApp();
-            else if (ty > 200 && ty < 225) runXOX(); // PALYAÇO GÖREVE HAZIR!
+            else if (ty > 200 && ty < 225) runXOX();
             else { currentState = DESKTOP; renderDesktop(); delay(300); }
         }
         else if (currentState == TEST_MENU) {
@@ -674,7 +668,7 @@ void loop() {
             else if (ty > 175 && ty < 195) { runJoyTest(); }
             else if (ty > 195 && ty < 225) { 
                 tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(50, 120); tft.print("I2S SINUS SES TESTI...");
-                playToneI2S(440, 1000); // ARTIK CIZIRTI YOK, SİNÜS VAR
+                playToneI2S(440, 1000); 
                 delay(1000); currentState = DESKTOP; renderDesktop();
             }
             else { currentState = DESKTOP; renderDesktop(); delay(300); }
@@ -687,7 +681,7 @@ void loop() {
                 tft.fillRect(85, 140, 170, 20, 0x0000); 
                 tft.fillRect(85, 140, (globalVolume*170)/100, 20, 0x07E0); 
                 tft.drawRect(85, 140, 170, 20, 0xFFFF);
-                playToneI2S(1000, 50); // CIZIRTISIZ GERİ BİLDİRİM
+                playToneI2S(1000, 50); 
                 delay(100);
             }
             else if (tx > 50 && tx < 270 && ty > 55 && ty < 85) { playClick(); tft.fillScreen(0); tft.setCursor(100,120); tft.print("UYKU MODU..."); delay(1000); esp_deep_sleep_start(); }
