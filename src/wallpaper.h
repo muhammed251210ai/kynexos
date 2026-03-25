@@ -1,4 +1,4 @@
-/* * Sovereign Wallpaper Engine - The Refined UI v230.118
+/* * Sovereign Wallpaper Engine - The Joker's Gambit v230.120
  * Geliştirici: Muhammed (Kynex)
  * Özellikler: Orijinal 3D Perspektifli Windows 10 Logosu
  */
