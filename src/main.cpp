@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.121 - THE CONFLICT-FREE CORE
+ * KynexOs Sovereign Build v230.122 - THE ABSOLUTE CALIBRATION
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Hardware Conflict Resolved (J1_X->6), Zero-Clipping Audio, Clown XOX
+ * Özellikler: Hardware Matrix Fix (Joy1 90-Deg Rotated), Touch Digitizer X-Shift Offset
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -35,13 +35,13 @@
 #define TOUCH_CS 16
 #define JOY_SELECT 0 
 
-// JOYSTICK PİNLERİ (MUHAMMED: ÇAKIŞMA ÖNLENDİ!)
-#define J1_X 6  // I2S_DOUT (5) ile çakışmaması için 6'ya alındı
+// JOYSTICK PİNLERİ
+#define J1_X 6
 #define J1_Y 4
 #define J2_X 7
 #define J2_Y 15
 
-// I2S PIN HARİTASI (KUSURSUZ ZAFER PİNLERİ)
+// I2S PIN HARİTASI
 #define I2S_LRC  18
 #define I2S_BCLK 17
 #define I2S_DOUT 5 
@@ -62,7 +62,7 @@ unsigned long lastClockUpdate = 0;
 bool isLongPress = false;
 uint16_t paintColor = 0xF800;
 
-// ---------------- I2S DİJİTAL SES MOTORU (SIFIR CIZIRTI MODU) ----------------
+// ---------------- I2S DİJİTAL SES MOTORU ----------------
 void initI2S() {
     Serial.println("[I2S] Baslatma dizisi basladi...");
     i2s_config_t i2s_config = {
@@ -96,7 +96,6 @@ void playToneI2S(float freq, int duration_ms) {
     int samples = (sampleRate * duration_ms) / 1000;
     size_t bytes_written;
     
-    // Dijital Kırpılmayı (Clipping/Cızırtı) önlemek için limit 25000'e çekildi.
     float amplitude = 25000.0 * (globalVolume / 100.0);
     
     for(int i=0; i<samples; i++) {
@@ -111,7 +110,7 @@ void playSquareWaveI2S(float freq, int duration_ms) {
     int sampleRate = 44100;
     int samples = (sampleRate * duration_ms) / 1000;
     size_t bytes_written;
-    float amplitude = 20000.0 * (globalVolume / 100.0); // Kaba kuvvet cızırtısı azaltıldı
+    float amplitude = 20000.0 * (globalVolume / 100.0); 
     int half_period = sampleRate / (freq * 2);
     
     for(int i=0; i<samples; i++) {
@@ -131,8 +130,13 @@ void playBootSound() {
     playToneI2S(1046.50, 400); 
 }
 
-// Dokunmatik Kalibrasyonu 
-int getTX(int rawX) { return map(rawX, 3900, 150, 0, 320); } 
+// ---------------- DOKUNMATİK KALİBRASYON EKRANI ----------------
+// MUHAMMED: Sola kayma (Offset) sorununu çözmek için X eksenine +15 piksel eklendi!
+int getTX(int rawX) { 
+    int tx = map(rawX, 3900, 150, 0, 320) + 15; 
+    if(tx < 0) tx = 0; if(tx > 320) tx = 320;
+    return tx;
+} 
 int getTY(int rawY) { return map(rawY, 3800, 200, 0, 240); }
 
 // ZAMAN VE MASAÜSTÜ YÖNETİMİ
@@ -370,7 +374,6 @@ void runXOX() {
                         playToneI2S(800, 50); 
                         turn = 2;
                     } else {
-                        // PALYAÇO ÇİZİMİ
                         tft.fillCircle(cx+30, cy+30, 22, 0xFFE0); 
                         tft.fillCircle(cx+10, cy+20, 10, 0x07FF); 
                         tft.fillCircle(cx+50, cy+20, 10, 0x07FF); 
@@ -452,13 +455,19 @@ void run3DCube() {
     currentState = DESKTOP; renderDesktop();
 }
 
+// MUHAMMED: Joy1 90 Derece Rotasyon Düzeltmesi!
 void runSnake() {
     int x[50], y[50], len=5, dx=8, dy=0, ax=160, ay=120, score=0;
     for(int i=0;i<50;i++){x[i]=-10;y[i]=-10;} x[0]=160; y[0]=120;
     tft.fillScreen(0x0000); tft.fillCircle(ax+4, ay+4, 4, 0xF800); delay(300);
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
-        int jx = analogRead(J1_X); int jy = analogRead(J1_Y);
+        
+        // MATRIS ROTASYONU
+        int raw_j1x = analogRead(J1_X); int raw_j1y = analogRead(J1_Y);
+        int jx = 4095 - raw_j1y; // Yeni X Ekseni
+        int jy = raw_j1x;        // Yeni Y Ekseni
+        
         if(jx < 1000 && dx==0) {dx=-8; dy=0;} else if(jx > 3000 && dx==0) {dx=8; dy=0;}
         else if(jy < 1000 && dy==0) {dx=0; dy=-8;} else if(jy > 3000 && dy==0) {dx=0; dy=8;}
         
@@ -483,7 +492,12 @@ void runPong() {
     int p1y=100, p2y=100, bx=160, by=120, bdx=3, bdy=3, s1=0, s2=0; tft.fillScreen(0); delay(300);
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
-        p1y = map(analogRead(J1_Y), 0, 4095, 0, 205); p2y = map(analogRead(J2_X), 0, 4095, 0, 205); 
+        
+        // MATRIS ROTASYONU (Sadece Y lazim)
+        int raw_j1x = analogRead(J1_X); 
+        p1y = map(raw_j1x, 0, 4095, 0, 205); 
+        p2y = map(analogRead(J2_Y), 0, 4095, 0, 205); 
+        
         tft.fillScreen(0); tft.setCursor(130, 10); tft.setTextColor(0x03FF); tft.printf("%d - %d", s1, s2);
         tft.fillRect(10, p1y, 8, 35, 0xF800); tft.fillRect(302, p2y, 8, 35, 0x07E0); tft.fillCircle(bx, by, 3, 0xFFFF);
         bx+=bdx; by+=bdy;
@@ -521,7 +535,14 @@ void runJoyTest() {
     tft.fillScreen(0x0000); delay(300);
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
-        int j1x = analogRead(J1_X); int j1y = analogRead(J1_Y); int j2x = analogRead(J2_X); int j2y = analogRead(J2_Y);
+        
+        // MATRİS ROTASYONU GÜNCELLENDİ
+        int raw_j1x = analogRead(J1_X); int raw_j1y = analogRead(J1_Y);
+        int j1x = 4095 - raw_j1y; 
+        int j1y = raw_j1x;
+        
+        int j2x = analogRead(J2_X); int j2y = analogRead(J2_Y);
+        
         tft.fillRect(20, 50, 130, 100, 0x1084); tft.setCursor(25, 60); tft.setTextColor(0xFFFF); tft.printf("SOL JOY\nX:%d Y:%d", j1x, j1y); tft.fillCircle(20 + map(j1x, 0, 4095, 5, 125), 50 + map(j1y, 0, 4095, 5, 95), 4, 0xF800);
         tft.fillRect(170, 50, 130, 100, 0x1084); tft.setCursor(175, 60); tft.printf("SAG JOY\nX:%d Y:%d", j2x, j2y); tft.fillCircle(170 + map(j2x, 0, 4095, 5, 125), 50 + map(j2y, 0, 4095, 5, 95), 4, 0x07E0);
         delay(30);
@@ -659,7 +680,7 @@ void loop() {
             else if (ty > 125 && ty < 150) runSnake(); 
             else if (ty > 150 && ty < 175) runPong(); 
             else if (ty > 175 && ty < 200) runPianoApp();
-            else if (ty > 200 && ty < 225) runXOX();
+            else if (ty > 200 && ty < 225) runXOX(); 
             else { currentState = DESKTOP; renderDesktop(); delay(300); }
         }
         else if (currentState == TEST_MENU) {
