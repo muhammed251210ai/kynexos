@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.122 - THE ABSOLUTE CALIBRATION
+ * KynexOs Sovereign Build v230.124 - THE RIGHT STICK CALIBRATION
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Hardware Matrix Fix (Joy1 90-Deg Rotated), Touch Digitizer X-Shift Offset
+ * Özellikler: Right Joystick 180-Deg Invert Fix, Pong J2 Sync
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -130,8 +130,7 @@ void playBootSound() {
     playToneI2S(1046.50, 400); 
 }
 
-// ---------------- DOKUNMATİK KALİBRASYON EKRANI ----------------
-// MUHAMMED: Sola kayma (Offset) sorununu çözmek için X eksenine +15 piksel eklendi!
+// Dokunmatik Kalibrasyonu 
 int getTX(int rawX) { 
     int tx = map(rawX, 3900, 150, 0, 320) + 15; 
     if(tx < 0) tx = 0; if(tx > 320) tx = 320;
@@ -455,7 +454,6 @@ void run3DCube() {
     currentState = DESKTOP; renderDesktop();
 }
 
-// MUHAMMED: Joy1 90 Derece Rotasyon Düzeltmesi!
 void runSnake() {
     int x[50], y[50], len=5, dx=8, dy=0, ax=160, ay=120, score=0;
     for(int i=0;i<50;i++){x[i]=-10;y[i]=-10;} x[0]=160; y[0]=120;
@@ -463,10 +461,9 @@ void runSnake() {
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         
-        // MATRIS ROTASYONU
         int raw_j1x = analogRead(J1_X); int raw_j1y = analogRead(J1_Y);
-        int jx = 4095 - raw_j1y; // Yeni X Ekseni
-        int jy = raw_j1x;        // Yeni Y Ekseni
+        int jx = 4095 - raw_j1y; 
+        int jy = raw_j1x;
         
         if(jx < 1000 && dx==0) {dx=-8; dy=0;} else if(jx > 3000 && dx==0) {dx=8; dy=0;}
         else if(jy < 1000 && dy==0) {dx=0; dy=-8;} else if(jy > 3000 && dy==0) {dx=0; dy=8;}
@@ -493,10 +490,14 @@ void runPong() {
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         
-        // MATRIS ROTASYONU (Sadece Y lazim)
         int raw_j1x = analogRead(J1_X); 
-        p1y = map(raw_j1x, 0, 4095, 0, 205); 
-        p2y = map(analogRead(J2_Y), 0, 4095, 0, 205); 
+        int j1y = raw_j1x; 
+        p1y = map(j1y, 0, 4095, 0, 205); 
+        
+        // MUHAMMED: J2 Y Eksen Senkronizasyonu (180 Derece Ters Çevrildi)
+        int raw_j2x = analogRead(J2_X); 
+        int j2y = 4095 - raw_j2x; 
+        p2y = map(j2y, 0, 4095, 0, 205); 
         
         tft.fillScreen(0); tft.setCursor(130, 10); tft.setTextColor(0x03FF); tft.printf("%d - %d", s1, s2);
         tft.fillRect(10, p1y, 8, 35, 0xF800); tft.fillRect(302, p2y, 8, 35, 0x07E0); tft.fillCircle(bx, by, 3, 0xFFFF);
@@ -536,12 +537,14 @@ void runJoyTest() {
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         
-        // MATRİS ROTASYONU GÜNCELLENDİ
         int raw_j1x = analogRead(J1_X); int raw_j1y = analogRead(J1_Y);
         int j1x = 4095 - raw_j1y; 
         int j1y = raw_j1x;
         
-        int j2x = analogRead(J2_X); int j2y = analogRead(J2_Y);
+        // MUHAMMED: J2 İçin 180 Derece Tam Ters Matris Çevirimi (The Axis Fix)
+        int raw_j2x = analogRead(J2_X); int raw_j2y = analogRead(J2_Y);
+        int j2x = 4095 - raw_j2x; 
+        int j2y = 4095 - raw_j2y; 
         
         tft.fillRect(20, 50, 130, 100, 0x1084); tft.setCursor(25, 60); tft.setTextColor(0xFFFF); tft.printf("SOL JOY\nX:%d Y:%d", j1x, j1y); tft.fillCircle(20 + map(j1x, 0, 4095, 5, 125), 50 + map(j1y, 0, 4095, 5, 95), 4, 0xF800);
         tft.fillRect(170, 50, 130, 100, 0x1084); tft.setCursor(175, 60); tft.printf("SAG JOY\nX:%d Y:%d", j2x, j2y); tft.fillCircle(170 + map(j2x, 0, 4095, 5, 125), 50 + map(j2y, 0, 4095, 5, 95), 4, 0x07E0);
