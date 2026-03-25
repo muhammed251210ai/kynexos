@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.124 - THE RIGHT STICK CALIBRATION
+ * KynexOs Sovereign Build v230.125 - THE TWIN MATRIX
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Right Joystick 180-Deg Invert Fix, Pong J2 Sync
+ * Özellikler: Dual 90-Deg Rotated Joysticks, Zero-Clipping Audio, Clown XOX
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -494,9 +494,9 @@ void runPong() {
         int j1y = raw_j1x; 
         p1y = map(j1y, 0, 4095, 0, 205); 
         
-        // MUHAMMED: J2 Y Eksen Senkronizasyonu (180 Derece Ters Çevrildi)
+        // MUHAMMED: J2 İÇİN KUSURSUZ 90 DERECE İKİZ MATRİS (Y Ekseni Yönü)
         int raw_j2x = analogRead(J2_X); 
-        int j2y = 4095 - raw_j2x; 
+        int j2y = raw_j2x; 
         p2y = map(j2y, 0, 4095, 0, 205); 
         
         tft.fillScreen(0); tft.setCursor(130, 10); tft.setTextColor(0x03FF); tft.printf("%d - %d", s1, s2);
@@ -537,17 +537,17 @@ void runJoyTest() {
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         
+        // MUHAMMED: İki Joystick için Mükemmel İkiz 90 Derece Matris 
         int raw_j1x = analogRead(J1_X); int raw_j1y = analogRead(J1_Y);
         int j1x = 4095 - raw_j1y; 
         int j1y = raw_j1x;
         
-        // MUHAMMED: J2 İçin 180 Derece Tam Ters Matris Çevirimi (The Axis Fix)
         int raw_j2x = analogRead(J2_X); int raw_j2y = analogRead(J2_Y);
-        int j2x = 4095 - raw_j2x; 
-        int j2y = 4095 - raw_j2y; 
+        int j2x = 4095 - raw_j2y; 
+        int j2y = raw_j2x; 
         
         tft.fillRect(20, 50, 130, 100, 0x1084); tft.setCursor(25, 60); tft.setTextColor(0xFFFF); tft.printf("SOL JOY\nX:%d Y:%d", j1x, j1y); tft.fillCircle(20 + map(j1x, 0, 4095, 5, 125), 50 + map(j1y, 0, 4095, 5, 95), 4, 0xF800);
-        tft.fillRect(170, 50, 130, 100, 0x1084); tft.setCursor(175, 60); tft.printf("SAG JOY\nX:%d Y:%d", j2x, j2y); tft.fillCircle(170 + map(j2x, 0, 4095, 5, 125), 50 + map(j2y, 0, 4095, 5, 95), 4, 0x07E0);
+        tft.fillRect(170, 50, 130, 100, 0x1084); tft.setCursor(175, 60); tft.setTextColor(0xFFFF); tft.printf("SAG JOY\nX:%d Y:%d", j2x, j2y); tft.fillCircle(170 + map(j2x, 0, 4095, 5, 125), 50 + map(j2y, 0, 4095, 5, 95), 4, 0x07E0);
         delay(30);
     }
     currentState = DESKTOP; renderDesktop();
