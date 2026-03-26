@@ -1,22 +1,11 @@
-# **************************************************************************
-# * Kynex Sovereign - Master Partition Table v230.6
-# * Geliştirici: Muhammed (Kynex)
-# * Donanım: ESP32-S3 N16R8 (16MB Flash)
-# * Yapı: KynexOS (Primary) + Retro-Go (Secondary) + FFat Storage
-# * Talimat: Asla satır silmeden, tam ve tek parça kod.
-# **************************************************************************
-# Name,     Type, SubType, Offset,   Size,     Flags
-# **************************************************************************
-
-nvs,      data, nvs,     0x9000,   0x4000,
-otadata,  data, ota,     0xd000,   0x2000,
-phy_init, data, phy,     0xf000,   0x1000,
-
-# MUHAMMED: KynexOS (Windows 10 UI) Birincil Sistem
-kynexos,  app,  ota_0,   0x10000,  0x400000,
-
-# MUHAMMED: Retro-Go Oyun Dünyası İkincil Sistem
-retrogo,  app,  ota_1,   0x410000, 0x7F0000,
-
-# MUHAMMED: Ortak Depolama Alanı (Wallpaper, ROMs, Save)
-storage,  data, fat,     0xC00000, 0x400000,
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x4000,
+otadata,  data, ota,     0xd000,  0x2000,
+phy_init, data, phy,     0xf000,  0x1000,
+kynexos,  app,  factory, 0x10000, 0x400000,
+launcher, app,  ota_0,   0x410000,0x100000,
+retro,    app,  ota_1,   0x510000,0x100000,
+prboom,   app,  ota_2,   0x610000,0x0C0000,
+gwenesis, app,  ota_3,   0x6D0000,0x100000,
+fmsx,     app,  ota_4,   0x7D0000,0x090000,
+storage,  data, fat,     0x860000,0x7A0000,
