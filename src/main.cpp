@@ -33,7 +33,7 @@
 #define TFT_RST 14
 #define TFT_BL 1
 #define TOUCH_CS 16
-#define JOY_SELECT 21 // MUHAMMED: Çökme koruması için donanımsal Select pini 21'e güncellendi!
+#define JOY_SELECT 0 
 
 // JOYSTICK PİNLERİ
 #define J1_X 6
