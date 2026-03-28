@@ -33,13 +33,13 @@
 #define TFT_RST 14
 #define TFT_BL 1
 #define TOUCH_CS 16
-#define JOY_SELECT 0 
+#define JOY_SELECT 21 // MUHAMMED: Çökme koruması için donanımsal Select pini 21'e güncellendi!
 
 // JOYSTICK PİNLERİ
 #define J1_X 6
 #define J1_Y 4
 #define J2_X 7
-#define J2_Y 15
+#define J2_Y 8 // MUHAMMED: Wi-Fi parazitinden kurtarılan Sağ Joystick Y ekseni 8'e güncellendi!
 
 // I2S PIN HARİTASI
 #define I2S_LRC  18
