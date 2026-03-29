@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.127 - THE CRYSTAL CORE
+ * KynexOs Sovereign Build v230.128 - THE PATHFINDER
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: MP3 VFS Path Fixed (/ffat), Dynamic I2S Core Switching (Zero Crackle)
+ * Özellikler: FFat VFS Path Fixed (/music), Dynamic I2S Core Switching
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -99,7 +99,6 @@ void initI2S() {
     i2s_set_pin(I2S_NUM_0, &pin_config);
 }
 
-// MUHAMMED: Kilitlenme ve cızırtı önleyici düşük genlik zırhı (Max 8000)
 void playToneI2S(float freq, int duration_ms) {
     if (freq <= 0 || globalVolume <= 0) return;
     int sampleRate = 44100;
@@ -292,7 +291,6 @@ void runBtManager() {
 void loadMusicFiles() {
     musicFiles.clear();
     if(!ffatMounted) {
-        // MUHAMMED: VFS (Sanal Dosya Sistemi) yolu "/ffat" olarak düzeltildi!
         if(FFat.begin(false, "/ffat", 10, "ffat")) {
             ffatMounted = true;
             Serial.println("[FFAT] Muzik dizini basariyla baglandi!");
@@ -302,10 +300,10 @@ void loadMusicFiles() {
         }
     }
 
-    // MUHAMMED: Dizin yolu VFS kuralına göre düzeltildi
-    File dir = FFat.open("/ffat/music");
+    // MUHAMMED: VFS yolunda /ffat yazmadan doğrudan diskin içine (/music) bakıyoruz!
+    File dir = FFat.open("/music");
     if (!dir) {
-        Serial.println("[FFAT] /ffat/music klasoru yok!");
+        Serial.println("[FFAT] /music klasoru yok!");
         return;
     }
     
@@ -314,8 +312,8 @@ void loadMusicFiles() {
         if(!file.isDirectory()) {
             String fileName = String(file.name());
             if(fileName.endsWith(".mp3") || fileName.endsWith(".MP3")) {
-                // Tam yol listeye eklenir
-                musicFiles.push_back(fileName);
+                // MUHAMMED: Tam okuma yolunu /music/sarki.mp3 olarak ekliyoruz!
+                musicFiles.push_back("/music/" + fileName);
             }
         }
         file = dir.openNextFile();
@@ -338,7 +336,6 @@ void renderMusicPlayerUI() {
 
     tft.fillRect(10, 50, 300, 40, 0x0000);
     tft.setCursor(20, 65);
-    // Tam yol içerisinden sadece şarkı ismini kesip alıyoruz
     String fullPath = musicFiles[currentTrackIndex];
     String trackName = fullPath.substring(fullPath.lastIndexOf('/') + 1);
     if(trackName.length() > 35) trackName = trackName.substring(0, 35) + "...";
@@ -378,11 +375,10 @@ void runMusicPlayer() {
         currentState = DESKTOP; renderDesktop(); return;
     }
 
-    // MUHAMMED: DİNAMİK SES MOTORU GEÇİŞİ (Çakışma Koruması)
-    i2s_driver_uninstall(I2S_NUM_0); // 1. UI Bip ses motorunu tamamen sil ve pinleri bırak
+    i2s_driver_uninstall(I2S_NUM_0); 
     delay(50);
     
-    Audio *mp3Audio = new Audio(); // 2. Sadece müzik çalara özel dinamik MP3 motoru oluştur
+    Audio *mp3Audio = new Audio(); 
     mp3Audio->setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
     mp3Audio->setVolume(globalVolume / 4.76); 
     
@@ -452,11 +448,10 @@ void runMusicPlayer() {
         }
     }
     
-    // MUHAMMED: Çıkışta ses çakışmasını engellemek için geri dönüş!
     mp3Audio->stopSong();
-    delete mp3Audio; // 3. MP3 motorunu tamamen parçala ve belekten sil
+    delete mp3Audio; 
     delay(50);
-    initI2S(); // 4. UI Bip motorunu kendi kurallarıyla tekrar inşa et!
+    initI2S(); 
     
     currentState = DESKTOP; renderDesktop();
 }
