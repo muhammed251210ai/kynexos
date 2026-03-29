@@ -2,7 +2,7 @@
 # * Kynex Sovereign - KynexOs Discrete CI v230.47
 # * Geliştirici: Muhammed (Kynex)
 # * Görev: Separate Bootloader, Partition, Firmware and Music Artifacts
-# * Değişiklik: mtools ile MP3'ler FFAT formatinda music.bin olarak eklendi!
+# * Değişiklik: Kutuphane Zaman Makinesi Eklendi! (2023 MP3 Fix)
 # **************************************************************************
 
 name: KynexOs Sovereign Build v230.0
@@ -37,6 +37,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade platformio esptool
 
+      - name: KynexOs Kutuphane Zaman Makinesi (Audio Fix)
+        run: |
+          mkdir -p lib
+          cd lib
+          git clone https://github.com/schreibfaul1/ESP32-audioI2S.git
+          cd ESP32-audioI2S
+          # MUHAMMED: Kutuphanenin tam olarak 1 Kasim 2023'teki hatasiz haline donus yapiyoruz!
+          git checkout $(git rev-list -n 1 --before="2023-11-01 00:00" HEAD)
+
       - name: KynexOs Derle
         run: pio run
 
@@ -47,11 +56,8 @@ jobs:
           mkdir -p music
           # Partitions.csv icindeki 0x7A0000 boyutuna (7808 KB) tam esit bos disk imaji olustur
           dd if=/dev/zero of=music.bin bs=1024 count=7808
-          # Imaj dosyasini FAT16 olarak formatla
           mkfs.fat -F 16 music.bin
-          # Imaj icerisine /music klasorunu ac
           mmd -i music.bin ::/music
-          # Github deposundaki music klasorunun icindeki her seyi imajdaki /music icine kopyala
           mcopy -i music.bin music/* ::/music/ || true
 
       - name: Sovereign Discrete Pack Yukle
