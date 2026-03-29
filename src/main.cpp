@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.125 - THE TWIN MATRIX
+ * KynexOs Sovereign Build v230.126 - THE MEDIA UPDATE
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Dual 90-Deg Rotated Joysticks, Zero-Clipping Audio, Clown XOX
+ * Özellikler: MP3 Music Player (FFAT), Anti-Clipping Audio Fix, Dual Matrix
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -23,6 +23,9 @@
 #include "driver/i2s.h" 
 #include <math.h>
 #include "wallpaper.h"
+#include "FS.h"
+#include "FFat.h"
+#include "Audio.h" // MUHAMMED: MP3 Çalar için eklendi! (ESP32-audioI2S kütüphanesi gerekir)
 
 // DONANIM PİNLERİ
 #define TFT_SCK 12
@@ -39,7 +42,7 @@
 #define J1_X 6
 #define J1_Y 4
 #define J2_X 7
-#define J2_Y 8 // MUHAMMED: Wi-Fi parazitinden kurtarılan Sağ Joystick Y ekseni 8'e güncellendi!
+#define J2_Y 8
 
 // I2S PIN HARİTASI
 #define I2S_LRC  18
@@ -49,8 +52,9 @@
 Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
 XPT2046_Touchscreen touch(TOUCH_CS);
 Preferences prefs;
+Audio audio; // Ses kütüphanesi nesnesi
 
-enum State { DESKTOP, START_MENU, SETTINGS_HUB, WIFI_MENU, BT_MENU, CMD_PROMPT, SYS_INFO, PAINT, TEST_MENU, GAME_MENU, CALCULATOR, POWER_MENU, XOX_GAME };
+enum State { DESKTOP, START_MENU, SETTINGS_HUB, WIFI_MENU, BT_MENU, CMD_PROMPT, SYS_INFO, PAINT, TEST_MENU, GAME_MENU, CALCULATOR, POWER_MENU, XOX_GAME, MUSIC_PLAYER };
 State currentState = DESKTOP;
 bool whiteTheme = false;
 bool btState = false;
@@ -62,9 +66,20 @@ unsigned long lastClockUpdate = 0;
 bool isLongPress = false;
 uint16_t paintColor = 0xF800;
 
-// ---------------- I2S DİJİTAL SES MOTORU ----------------
+// Müzik Çalar Değişkenleri
+bool ffatMounted = false;
+std::vector<String> musicFiles;
+int currentTrackIndex = 0;
+bool isPlaying = false;
+unsigned long lastMusicUITime = 0;
+
+// ---------------- I2S DİJİTAL SES MOTORU VE ANTI-CLIPPING FIX ----------------
 void initI2S() {
     Serial.println("[I2S] Baslatma dizisi basladi...");
+    audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
+    audio.setVolume(globalVolume / 4.76); // Audio kütüphanesi 0-21 arası alır
+    
+    // Sistem sesleri için temel I2S ayarı (Audio kütüphanesi devrede değilken kullanılır)
     i2s_config_t i2s_config = {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
         .sample_rate = 44100,
@@ -72,8 +87,8 @@ void initI2S() {
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-        .dma_buf_count = 16, 
-        .dma_buf_len = 512, 
+        .dma_buf_count = 8, 
+        .dma_buf_len = 256, 
         .use_apll = false,
         .tx_desc_auto_clear = true 
     };
@@ -85,18 +100,23 @@ void initI2S() {
         .data_in_num = I2S_PIN_NO_CHANGE
     };
     
+    // Audio nesnesi kendi i2s kurulumunu yaptığı için sadece Müzik çalar dışı manuel I2S gerekirse kurarız.
+    // Ancak playToneI2S'in stabil çalışması için driver'ı biz kuruyoruz. Audio kütüphanesi bunu devralacak.
     i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
     i2s_set_pin(I2S_NUM_0, &pin_config);
-    i2s_set_clk(I2S_NUM_0, 44100, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_STEREO);
 }
 
+// MUHAMMED: Anti-Clipping (Cızırtı Giderici) Algoritma Eklendi!
 void playToneI2S(float freq, int duration_ms) {
     if (freq <= 0 || globalVolume <= 0) return;
     int sampleRate = 44100;
     int samples = (sampleRate * duration_ms) / 1000;
     size_t bytes_written;
     
-    float amplitude = 25000.0 * (globalVolume / 100.0);
+    // Cızırtıyı (Clipping) önlemek için max genliği 16-bit sınırının altında (20000) tutuyoruz.
+    // Eskiden 25000 idi ve ani patlamalarda 32767'yi geçip kare dalga cızırtısı yapıyordu.
+    float max_amplitude = 18000.0; 
+    float amplitude = max_amplitude * (globalVolume / 100.0);
     
     for(int i=0; i<samples; i++) {
         int16_t sample = (int16_t)(amplitude * sin(2.0 * PI * freq * i / sampleRate));
@@ -110,7 +130,7 @@ void playSquareWaveI2S(float freq, int duration_ms) {
     int sampleRate = 44100;
     int samples = (sampleRate * duration_ms) / 1000;
     size_t bytes_written;
-    float amplitude = 20000.0 * (globalVolume / 100.0); 
+    float amplitude = 15000.0 * (globalVolume / 100.0); // Cızırtı önlemi için genlik düşürüldü
     int half_period = sampleRate / (freq * 2);
     
     for(int i=0; i<samples; i++) {
@@ -168,7 +188,7 @@ void renderStartMenu() {
     tft.setCursor(10, 75);  tft.print("> CMD PROMPT");
     tft.setCursor(10, 105); tft.print("> HESAP MAKINESI");
     tft.setCursor(10, 135); tft.print("> PAINT");
-    tft.setCursor(10, 165); tft.print("> TESTLER");
+    tft.setCursor(10, 165); tft.print("> MUZIK CALAR"); // Yeni Menü Öğesi
     tft.setCursor(10, 195); tft.print("> OYUNLAR & UYG");
 
     tft.fillRect(140, 15, 80, 40, 0x03FF); tft.setCursor(145, 30); tft.setTextColor(0xFFFF); tft.print("WIFI");
@@ -277,6 +297,189 @@ void runBtManager() {
     currentState = DESKTOP; renderDesktop();
 }
 
+// ---------------- MÜZİK ÇALAR (FFAT ÜZERİNDEN MP3) ----------------
+void loadMusicFiles() {
+    musicFiles.clear();
+    if(!ffatMounted) {
+        if(FFat.begin(false, "/sd", 10, "ffat")) {
+            ffatMounted = true;
+            Serial.println("[FFAT] Müzik dizini başarıyla bağlandı!");
+        } else {
+            Serial.println("[FFAT] HATA: ffat bölümü bulunamadı veya formata ihtiyacı var!");
+            return;
+        }
+    }
+
+    File dir = FFat.open("/music");
+    if (!dir) {
+        Serial.println("[FFAT] /music klasörü yok, oluşturuluyor...");
+        FFat.mkdir("/music");
+        return;
+    }
+    
+    File file = dir.openNextFile();
+    while(file) {
+        if(!file.isDirectory()) {
+            String fileName = String(file.name());
+            if(fileName.endsWith(".mp3") || fileName.endsWith(".MP3")) {
+                musicFiles.push_back("/music/" + fileName);
+            }
+        }
+        file = dir.openNextFile();
+    }
+    if(musicFiles.size() > 0) {
+        Serial.printf("[FFAT] %d adet müzik bulundu.\n", musicFiles.size());
+    } else {
+        Serial.println("[FFAT] /music klasörü boş.");
+    }
+}
+
+void renderMusicPlayerUI() {
+    tft.fillScreen(0x10A2); // Koyu Mavi Arka Plan
+    tft.fillRect(0, 0, 320, 35, 0x03FF);
+    tft.setTextColor(0xFFFF); tft.setTextSize(2); tft.setCursor(10, 10);
+    tft.print("SOVEREIGN MUSIC");
+
+    tft.setTextSize(1);
+    if(musicFiles.size() == 0) {
+        tft.setCursor(20, 100); tft.print("HATA: /music klasorunde MP3 bulunamadi.");
+        tft.setCursor(20, 120); tft.print("Lutfen FFAT hafizasina dosya yukleyin.");
+        tft.fillRect(100, 200, 120, 30, 0xF800); tft.setCursor(135, 210); tft.print("GERI CIK");
+        return;
+    }
+
+    // Şarkı Adı Gösterimi (Uzunsa Keser)
+    tft.fillRect(10, 50, 300, 40, 0x0000);
+    tft.setCursor(20, 65);
+    String trackName = musicFiles[currentTrackIndex].substring(7); // "/music/" kısmını atar
+    if(trackName.length() > 35) trackName = trackName.substring(0, 35) + "...";
+    tft.print(trackName);
+
+    // Durum ve Süre Bilgisi
+    tft.fillRect(10, 100, 300, 20, 0x10A2);
+    tft.setCursor(15, 105);
+    tft.setTextColor(0x07E0);
+    tft.print(isPlaying ? "OYNATILIYOR..." : "DURDURULDU.");
+    tft.setTextColor(0xFFFF);
+
+    // İlerleme Çubuğu (Temsili)
+    tft.drawRect(10, 130, 300, 15, 0xFFFF);
+    
+    // Kontrol Butonları
+    // Geri
+    tft.fillRect(20, 160, 60, 40, 0x3186); tft.setCursor(35, 175); tft.print("<< 10s");
+    // Oynat/Durdur
+    tft.fillRect(90, 160, 140, 40, isPlaying ? 0xF800 : 0x07E0); 
+    tft.setCursor(120, 175); tft.setTextSize(2); tft.print(isPlaying ? "DURDUR" : "OYNAT"); tft.setTextSize(1);
+    // İleri
+    tft.fillRect(240, 160, 60, 40, 0x3186); tft.setCursor(255, 175); tft.print("10s >>");
+
+    // Ses ve Çıkış
+    tft.fillRect(10, 210, 140, 25, 0x0000); tft.setCursor(20, 218); tft.printf("SES: %%%d", globalVolume);
+    tft.drawRect(150, 210, 160, 25, 0xFFFF); tft.fillRect(150, 210, (globalVolume*160)/100, 25, 0x07E0);
+    tft.fillRect(270, 5, 40, 25, 0xF800); tft.setCursor(275, 12); tft.print("CIK");
+}
+
+void runMusicPlayer() {
+    loadMusicFiles();
+    renderMusicPlayerUI();
+    
+    if(musicFiles.size() == 0) {
+        while(digitalRead(JOY_SELECT) == HIGH) {
+            esp_task_wdt_reset();
+            if(touch.touched()) {
+                TS_Point p = touch.getPoint(); int ty = getTY(p.y);
+                if(ty > 190) break; 
+            }
+            delay(100);
+        }
+        currentState = DESKTOP; renderDesktop(); return;
+    }
+
+    // Audio kütüphanesi başlatılıyor
+    audio.setVolume(globalVolume / 4.76); 
+    if(isPlaying) audio.connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
+
+    bool forceExit = false;
+    while(digitalRead(JOY_SELECT) == HIGH && !forceExit) {
+        esp_task_wdt_reset();
+        
+        if(isPlaying) {
+            audio.loop(); // Ses dosyasını işlemeye devam et
+            
+            // UI Güncelleme (Her saniye)
+            if(millis() - lastMusicUITime > 1000) {
+                tft.fillRect(10, 130, 300, 15, 0x0000); // İlerleme çubuğu içi
+                int currentSec = audio.getAudioCurrentTime();
+                int totalSec = audio.getAudioFileDuration();
+                if(totalSec > 0) {
+                    int barWidth = (currentSec * 300) / totalSec;
+                    tft.fillRect(10, 130, barWidth, 15, 0x07E0);
+                }
+                lastMusicUITime = millis();
+            }
+        }
+
+        if(touch.touched()) {
+            TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
+            
+            // Çıkış Butonu
+            if(tx > 260 && ty < 40) { playClick(); audio.stopSong(); isPlaying = false; forceExit = true; }
+            
+            // Oynat / Durdur
+            else if(tx > 90 && tx < 230 && ty > 150 && ty < 205) {
+                playClick();
+                isPlaying = !isPlaying;
+                if(isPlaying) {
+                    audio.connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
+                } else {
+                    audio.stopSong();
+                }
+                renderMusicPlayerUI();
+                delay(300);
+            }
+            
+            // Sonraki Şarkı / İleri Sar
+            else if(tx >= 240 && ty > 150 && ty < 205) {
+                playClick();
+                int currentSec = audio.getAudioCurrentTime();
+                audio.setAudioPlayPosition(currentSec + 10); // 10 Saniye İleri
+                delay(300);
+            }
+            
+            // Önceki Şarkı / Geri Sar
+            else if(tx <= 80 && ty > 150 && ty < 205) {
+                playClick();
+                int currentSec = audio.getAudioCurrentTime();
+                int newPos = currentSec - 10;
+                if(newPos < 0) newPos = 0;
+                audio.setAudioPlayPosition(newPos); // 10 Saniye Geri
+                delay(300);
+            }
+
+            // Ses Ayarı
+            else if(tx > 150 && ty > 205) {
+                globalVolume = ((tx - 150) * 100) / 160;
+                if(globalVolume < 0) globalVolume = 0; if(globalVolume > 100) globalVolume = 100;
+                prefs.putInt("vol", globalVolume);
+                audio.setVolume(globalVolume / 4.76);
+                
+                tft.fillRect(10, 210, 140, 25, 0x0000); tft.setCursor(20, 218); tft.printf("SES: %%%d", globalVolume);
+                tft.fillRect(150, 210, 160, 25, 0x0000); 
+                tft.fillRect(150, 210, (globalVolume*160)/100, 25, 0x07E0);
+                tft.drawRect(150, 210, 160, 25, 0xFFFF);
+                delay(100);
+            }
+        }
+    }
+    
+    // Çıkışta ses motorunu sistem bip moduna geri al
+    audio.stopSong();
+    initI2S(); 
+    currentState = DESKTOP; renderDesktop();
+}
+
+
 // ---------------- HESAP MAKİNESİ & CMD & SYS INFO ----------------
 void runCalculator() {
     String eq = ""; const char* cKeys[4][4] = { {"7","8","9","/"}, {"4","5","6","*"}, {"1","2","3","-"}, {"C","0","=","+"} };
@@ -332,7 +535,7 @@ void runSysInfo() {
     currentState = DESKTOP; renderDesktop();
 }
 
-// ---------------- OYUNLAR VE UYGULAMALAR ----------------
+// ---------------- OYUNLAR VE TESTLER ----------------
 
 void runXOX() {
     int board[9] = {0}; 
@@ -658,7 +861,7 @@ void loop() {
             else if (ty > 70 && ty < 100) { playClick(); currentState = CMD_PROMPT; runCMD(); }
             else if (ty > 100 && ty < 130) { playClick(); currentState = CALCULATOR; runCalculator(); }
             else if (ty > 130 && ty < 160) { playClick(); currentState = PAINT; runPaintApp(); }
-            else if (ty > 160 && ty < 190) { playClick(); currentState = TEST_MENU; tft.fillRect(161, 150, 130, 75, 0x1084); tft.drawRect(161, 150, 130, 75, 0x07FF); tft.setCursor(170, 165); tft.print("1. DOKUNMA TEST"); tft.setCursor(170, 185); tft.print("2. JOYSTICK TEST"); tft.setCursor(170, 205); tft.print("3. I2S SES TEST"); delay(300); }
+            else if (ty > 160 && ty < 190) { playClick(); currentState = MUSIC_PLAYER; runMusicPlayer(); } // Yeni Menü
             else if (ty > 190) { 
                 playClick(); currentState = GAME_MENU; 
                 tft.fillRect(161, 100, 130, 125, 0x1084); 
