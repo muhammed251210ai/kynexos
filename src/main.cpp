@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.129 - THE WIRELESS VAULT
+ * KynexOs Sovereign Build v230.130 - THE KYNEX CORE
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Wi-Fi File Manager, Auto-Format FFAT, Dynamic MP3 Core
+ * Özellikler: AP Hotspot, Dynamic Web File Manager, Native Files App, Admin Pass
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -26,7 +26,7 @@
 #include "FS.h"
 #include "FFat.h"
 #include "Audio.h"
-#include <WebServer.h> // MUHAMMED: Wi-Fi Dosya Yöneticisi İçin Eklendi!
+#include <WebServer.h>
 
 // DONANIM PİNLERİ
 #define TFT_SCK 12
@@ -53,13 +53,14 @@
 Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
 XPT2046_Touchscreen touch(TOUCH_CS);
 Preferences prefs;
-WebServer server(80); // Wi-Fi Sunucusu
+WebServer server(80); 
 File uploadFile;
 
-enum State { DESKTOP, START_MENU, SETTINGS_HUB, WIFI_MENU, BT_MENU, CMD_PROMPT, SYS_INFO, PAINT, TEST_MENU, GAME_MENU, CALCULATOR, POWER_MENU, XOX_GAME, MUSIC_PLAYER, FILE_MANAGER };
+enum State { DESKTOP, START_MENU, SETTINGS_HUB, WIFI_MENU, BT_MENU, CMD_PROMPT, SYS_INFO, PAINT, TEST_MENU, GAME_MENU, CALCULATOR, POWER_MENU, XOX_GAME, MUSIC_PLAYER, FILE_MANAGER, FILES_APP };
 State currentState = DESKTOP;
 bool whiteTheme = false;
 bool btState = false;
+bool apState = false; // MUHAMMED: Hotspot Durumu Eklendi
 int globalVolume = 50; 
 String savedSSID = "";
 String savedPASS = "";
@@ -167,7 +168,7 @@ void renderDesktop() {
     tft.fillRect(0, 215, 320, 25, whiteTheme ? 0xAD75 : 0x10A2); 
     drawRealWin10Logo(&tft, 8, 217, 24, 20, whiteTheme ? 0x0000 : 0xFFFF);
     
-    if(WiFi.status() == WL_CONNECTED) tft.fillCircle(240, 227, 4, 0x07E0); else tft.drawCircle(240, 227, 4, whiteTheme ? 0x0000 : 0xFFFF);
+    if(WiFi.status() == WL_CONNECTED || apState) tft.fillCircle(240, 227, 4, 0x07E0); else tft.drawCircle(240, 227, 4, whiteTheme ? 0x0000 : 0xFFFF);
     if(btState) tft.fillCircle(250, 227, 4, 0x03FF); else tft.drawCircle(250, 227, 4, whiteTheme ? 0x0000 : 0xFFFF);
     drawClock();
 }
@@ -189,8 +190,9 @@ void renderStartMenu() {
     tft.fillRect(140, 105, 80, 40, 0xF800); tft.setCursor(145, 120); tft.print("GUC MENUSU");
     tft.fillRect(140, 150, 80, 55, 0x07E0); tft.setCursor(145, 170); tft.setTextColor(0); tft.print("RETRO-GO");
     
-    // MUHAMMED: Yeni Wi-Fi Dosya Yöneticisi Butonu
     tft.fillRect(230, 15, 80, 40, 0xC618); tft.setCursor(235, 30); tft.setTextColor(0xFFFF); tft.print("DOSYA Y.");
+    // MUHAMMED: Yeni KynexOS Yerel Dosyalar Uygulaması Eklendi
+    tft.fillRect(230, 60, 80, 40, 0x1084); tft.setCursor(235, 75); tft.setTextColor(0xFFFF); tft.print("DOSYALAR");
 }
 
 // ---------------- KLAVYE ----------------
@@ -245,10 +247,14 @@ String runKeyboard(String prompt) {
 // ---------------- AĞ VE BT ----------------
 void runWifiManager() {
     tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(10, 10); tft.print("WIFI AGLARI TARANIYOR...");
-    WiFi.mode(WIFI_STA); int n = WiFi.scanNetworks();
+    WiFi.mode(WIFI_AP_STA); // MUHAMMED: Hem Hotspot Hem Normal Wifi moduna geçildi!
+    int n = WiFi.scanNetworks();
     tft.fillScreen(0x0000); tft.fillRect(0, 0, 320, 30, 0x03FF); tft.setCursor(10, 10); tft.print("WIFI AYARLARI (Secmek Icin Dokun)");
     for (int i = 0; i < 4 && i < n; ++i) { tft.drawRect(10, 40 + i*40, 300, 35, 0x07FF); tft.setCursor(20, 50 + i*40); tft.print(WiFi.SSID(i)); }
-    tft.fillRect(10, 200, 300, 35, 0xF800); tft.setCursor(120, 210); tft.print("GERI (CIKIS)");
+    
+    // MUHAMMED: KynexOS Hotspot Butonu Eklendi!
+    tft.fillRect(10, 200, 140, 35, 0xF800); tft.setCursor(20, 210); tft.print("GERI (CIKIS)");
+    tft.fillRect(160, 200, 150, 35, apState ? 0xF800 : 0x07E0); tft.setCursor(170, 210); tft.print(apState ? "HOTSPOT KAPAT" : "HOTSPOT AC");
 
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
@@ -270,7 +276,21 @@ void runWifiManager() {
                     } else { tft.fillScreen(0xF800); tft.setCursor(100, 120); tft.setTextColor(0xFFFF); tft.print("BAGLANTI HATASI!"); playError(); }
                     delay(2000); break;
                 }
-            } else if(ty > 200) { break; } 
+            } 
+            else if(ty > 200 && tx < 150) { break; } 
+            else if(ty > 200 && tx > 160) {
+                apState = !apState;
+                if(apState) {
+                    WiFi.softAP("KynexOs", "*muhammed*krid*");
+                } else {
+                    WiFi.softAPdisconnect(false);
+                }
+                tft.fillRect(160, 200, 150, 35, apState ? 0xF800 : 0x07E0); 
+                tft.setCursor(170, 210); tft.setTextColor(apState ? 0xFFFF : 0x0000);
+                tft.print(apState ? "HOTSPOT KAPAT" : "HOTSPOT AC");
+                tft.setTextColor(0xFFFF);
+                delay(300);
+            }
             delay(300);
         }
     }
@@ -293,37 +313,74 @@ void runBtManager() {
     currentState = DESKTOP; renderDesktop();
 }
 
-// ---------------- WIFI DOSYA YÖNETİCİSİ (WEB SERVER) ----------------
-const char* serverIndex = R"rawliteral(
-<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KynexOS Dosya Yoneticisi</title>
-<style>body{background:#101010;color:#FFF;font-family:sans-serif;text-align:center;margin-top:50px;}
-input[type=file]{margin:20px;padding:10px;background:#03FF;color:#FFF;border:none;border-radius:5px;}
-input[type=submit]{padding:15px 30px;background:#07E0;color:#000;border:none;border-radius:5px;font-weight:bold;cursor:pointer;font-size:16px;}
-.box{border:2px solid #555;padding:20px;display:inline-block;border-radius:10px;}
-</style></head><body>
-<div class="box">
-<h1>KynexOS Dosya Aktarim Merkezi</h1>
-<p>MP3 dosyalarini secin ve yukleyin. (Dosyalar otomatik olarak /music klasorune gider)</p>
-<form method="POST" action="/upload" enctype="multipart/form-data">
-<input type="file" name="f" accept=".mp3, .MP3"><br>
-<input type="submit" value="DOSYAYI GONDER">
-</form></div>
-</body></html>
-)rawliteral";
-
-void handleRoot() {
-    server.send(200, "text/html", serverIndex);
+// ---------------- WIFI DOSYA YÖNETİCİSİ (WEB SERVER) DİNAMİK YAPISI ----------------
+void handleWebFileMgr() {
+    String path = server.hasArg("dir") ? server.arg("dir") : "/";
+    if(server.hasArg("cmd")) {
+        String cmd = server.arg("cmd");
+        String name = server.arg("name");
+        String fullPath = path + (path=="/"?"":"/") + name;
+        
+        if(cmd == "mkdir") FFat.mkdir(fullPath);
+        if(cmd == "mkfile") { File f = FFat.open(fullPath, FILE_WRITE); if(f) f.close(); }
+        if(cmd == "delete") {
+            String target = server.arg("target");
+            File f = FFat.open(target);
+            if(f) {
+                bool isDir = f.isDirectory();
+                f.close();
+                if(isDir) FFat.rmdir(target); else FFat.remove(target);
+            }
+        }
+        server.sendHeader("Location", "/?dir=" + path);
+        server.send(303);
+        return;
+    }
+    
+    String html = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width'><style>body{background:#101010;color:#fff;font-family:sans-serif;} a{color:#07E0;text-decoration:none;margin:5px;display:inline-block;padding:5px;} .box{border:1px solid #555;padding:10px;margin:10px;}</style></head><body>";
+    html += "<h3>KynexOS Web Dosya Yoneticisi</h3>";
+    html += "<p>Mevcut Konum: " + path + "</p>";
+    if(path != "/") {
+        String up = path.substring(0, path.lastIndexOf('/'));
+        if(up=="") up="/";
+        html += "<a href='/?dir=" + up + "' style='background:#3186;color:#fff;'>[UST KLASORE DON]</a><br><hr>";
+    }
+    
+    html += "<div class='box'>";
+    File dir = FFat.open(path);
+    if(dir && dir.isDirectory()) {
+        File f = dir.openNextFile();
+        while(f) {
+            String fn = String(f.name());
+            String full = path + (path=="/"?"":"/") + fn;
+            if(f.isDirectory()) {
+                html += "&#128193; <a href='/?dir=" + full + "'>" + fn + "</a> <a style='color:red;' href='/?dir=" + path + "&cmd=delete&target=" + full + "'>[SIL]</a><br>";
+            } else {
+                html += "&#128196; " + fn + " <a style='color:red;' href='/?dir=" + path + "&cmd=delete&target=" + full + "'>[SIL]</a><br>";
+            }
+            f = dir.openNextFile();
+        }
+    }
+    html += "</div>";
+    
+    html += "<div class='box'><h4>Yeni Ekle</h4><form method='GET' action='/'>";
+    html += "<input type='hidden' name='dir' value='" + path + "'>";
+    html += "<input type='text' name='name' placeholder='Klasor/Dosya Adi'>";
+    html += "<button name='cmd' value='mkdir'>Klasor Ac</button>";
+    html += "<button name='cmd' value='mkfile'>Dosya Olustur</button></form></div>";
+    
+    html += "<div class='box'><h4>Mevcut Klasore Dosya Yukle</h4><form method='POST' action='/upload?dir=" + path + "' enctype='multipart/form-data'><input type='file' name='f'><button>Yukle</button></form></div>";
+    html += "</body></html>";
+    server.send(200, "text/html", html);
 }
 
 void handleUpload() {
     HTTPUpload& upload = server.upload();
     if(upload.status == UPLOAD_FILE_START) {
+        String path = server.hasArg("dir") ? server.arg("dir") : "/";
         String filename = upload.filename;
         if(!filename.startsWith("/")) filename = "/" + filename;
-        filename = "/music" + filename; // MP3 çalara gitmesi için klasörü zorla
-        
-        if (!FFat.exists("/music")) FFat.mkdir("/music"); // Klasör yoksa oluştur
+        filename = path + (path=="/"?"":"") + filename;
         
         uploadFile = FFat.open(filename, FILE_WRITE);
         Serial.print("[WIFI-UPLOAD] Dosya acildi: "); Serial.println(filename);
@@ -332,19 +389,17 @@ void handleUpload() {
     } else if(upload.status == UPLOAD_FILE_END) {
         if(uploadFile) uploadFile.close();
         Serial.print("[WIFI-UPLOAD] Basarili! Boyut: "); Serial.println(upload.totalSize);
-        server.send(200, "text/html", "<h1>Yukleme Basarili!</h1><br><a href='/' style='color:#07E0;font-size:24px;'>Yeni Dosya Yukle</a>");
     }
 }
 
 void runFileManager() {
-    if(WiFi.status() != WL_CONNECTED) {
+    if(WiFi.status() != WL_CONNECTED && !apState) {
         tft.fillScreen(0xF800); tft.setTextColor(0xFFFF); tft.setTextSize(1);
-        tft.setCursor(10, 100); tft.print("HATA: WIFI BAGLANTISI YOK!");
-        tft.setCursor(10, 120); tft.print("Once Aglar menusunden WIFI'a baglanin.");
+        tft.setCursor(10, 100); tft.print("HATA: WIFI VEYA HOTSPOT YOK!");
+        tft.setCursor(10, 120); tft.print("Once Aglar menusunden baglanin/HOTSPOT acin.");
         delay(3000); currentState = DESKTOP; renderDesktop(); return;
     }
     
-    // MUHAMMED: DİSK YOKSA OTOMATİK BOŞ FORMAT AT! (true komutu)
     if(!ffatMounted) {
         tft.fillScreen(0x0000); tft.setCursor(10, 100); tft.print("Disk kontrol ediliyor (Gerekirse Formatlanacak)...");
         if(FFat.begin(true, "/ffat", 10, "ffat")) { 
@@ -359,20 +414,24 @@ void runFileManager() {
     tft.fillRect(0, 0, 320, 30, 0x03FF);
     tft.setTextColor(0xFFFF); tft.setTextSize(1); tft.setCursor(10, 10); tft.print("WIFI DOSYA AKTARIM MERKEZI");
 
-    tft.setCursor(10, 50); tft.print("1. Telefon/PC ile ayni WIFI'a baglanin.");
-    tft.setCursor(10, 80); tft.print("2. Tarayicida su adrese gidin:");
-    tft.setTextSize(2); tft.setTextColor(0x07E0); tft.setCursor(10, 100);
-    tft.print("http://" + WiFi.localIP().toString());
+    tft.setCursor(10, 50); tft.print("1. Telefon/PC ile KynexOs (Sifre: *muhammed*krid*)");
+    tft.setCursor(10, 65); tft.print("   ya da ayni WIFI'a baglanin.");
+    tft.setCursor(10, 90); tft.print("2. Tarayicida su adrese gidin:");
+    tft.setTextSize(2); tft.setTextColor(0x07E0); tft.setCursor(10, 110);
+    String ipStr = (WiFi.status() == WL_CONNECTED) ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
+    tft.print("http://" + ipStr);
     
     tft.setTextSize(1); tft.setTextColor(0xFFFF);
-    tft.setCursor(10, 140); tft.print("3. MP3 dosyalarinizi secip yukleyin.");
-    tft.setCursor(10, 160); tft.print("Baglanti acik. Bekleniyor...");
+    tft.setCursor(10, 150); tft.print("3. Cihazin icini istediginiz gibi yonetin.");
+    tft.setCursor(10, 170); tft.print("Baglanti acik. Bekleniyor...");
 
     tft.fillRect(100, 200, 120, 30, 0xF800); tft.setCursor(125, 210); tft.print("CIKIS YAP");
 
-    server.on("/", HTTP_GET, handleRoot);
+    server.on("/", HTTP_GET, handleWebFileMgr);
     server.on("/upload", HTTP_POST, []() {
-        server.send(200, "text/html", "<h1>Yukleme Basarili!</h1><a href='/'>Geri Don</a>");
+        String path = server.hasArg("dir") ? server.arg("dir") : "/";
+        server.sendHeader("Location", "/?dir=" + path);
+        server.send(303);
     }, handleUpload);
     
     server.begin();
@@ -391,11 +450,107 @@ void runFileManager() {
     currentState = DESKTOP; renderDesktop();
 }
 
+// ---------------- KYNEXOS YEREL DOSYALAR UYGULAMASI (CİHAZ İÇİ) ----------------
+void runFilesApp() {
+    if(!ffatMounted) { 
+        if(FFat.begin(true, "/ffat", 10, "ffat")) ffatMounted = true; 
+        else { currentState = DESKTOP; renderDesktop(); return; } 
+    }
+    
+    String currentPath = "/";
+    int scrollY = 0;
+    bool redraw = true;
+    
+    struct FInfo { String name; bool isDir; };
+    std::vector<FInfo> items;
+    
+    while(digitalRead(JOY_SELECT) == HIGH) {
+        esp_task_wdt_reset();
+        
+        if(redraw) {
+            items.clear();
+            if(currentPath != "/") items.push_back({".. (UST KLASOR)", true});
+            
+            File dir = FFat.open(currentPath);
+            if(dir) {
+                File f = dir.openNextFile();
+                while(f) { items.push_back({String(f.name()), f.isDirectory()}); f = dir.openNextFile(); }
+            }
+            
+            tft.fillScreen(0x10A2);
+            tft.fillRect(0,0,320,30,0x03FF);
+            tft.setTextColor(0xFFFF); tft.setTextSize(1);
+            tft.setCursor(10,10); tft.print("DOSYALAR: " + currentPath);
+            
+            tft.fillRect(260, 40, 50, 80, 0x3186); tft.setCursor(265, 75); tft.print("YUKARI");
+            tft.fillRect(260, 130, 50, 80, 0x3186); tft.setCursor(265, 165); tft.print("ASAGI");
+            tft.fillRect(260, 215, 50, 25, 0xF800); tft.setCursor(275, 224); tft.print("CIK");
+            
+            for(int i=0; i<4; i++) {
+                int idx = scrollY + i;
+                if(idx < items.size()) {
+                    int y = 40 + (i*45);
+                    tft.fillRect(10, y, 190, 40, items[idx].isDir ? 0x07E0 : 0xFFFF);
+                    tft.setTextColor(0x0000); tft.setCursor(15, y+15);
+                    String n = items[idx].name; if(n.length()>15) n=n.substring(0,15)+"..";
+                    tft.print((items[idx].isDir ? "[D] " : "[F] ") + n);
+                    
+                    if(items[idx].name != ".. (UST KLASOR)") {
+                        tft.fillRect(210, y, 40, 40, 0xF800);
+                        tft.setTextColor(0xFFFF); tft.setCursor(218, y+15); tft.print("SIL");
+                    }
+                }
+            }
+            redraw = false;
+        }
+        
+        if(touch.touched()) {
+            TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
+            
+            if(tx > 260 && ty > 215) { playClick(); break; } 
+            else if(tx > 260 && ty > 40 && ty < 120) { playClick(); if(scrollY > 0) scrollY--; redraw = true; delay(200); } 
+            else if(tx > 260 && ty > 130 && ty < 210) { playClick(); if(scrollY < items.size()-1) scrollY++; redraw = true; delay(200); } 
+            else if(tx < 200 && ty > 40 && ty < 220) { 
+                int clickedIdx = scrollY + ((ty - 40) / 45);
+                if(clickedIdx < items.size()) {
+                    playClick();
+                    if(items[clickedIdx].isDir) {
+                        if(items[clickedIdx].name == ".. (UST KLASOR)") {
+                            currentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
+                            if(currentPath == "") currentPath = "/";
+                        } else {
+                            currentPath += (currentPath=="/"?"":"/") + items[clickedIdx].name;
+                        }
+                        scrollY = 0; redraw = true; delay(300);
+                    }
+                }
+            }
+            else if(tx > 200 && tx < 250 && ty > 40 && ty < 220) { 
+                int clickedIdx = scrollY + ((ty - 40) / 45);
+                if(clickedIdx < items.size() && items[clickedIdx].name != ".. (UST KLASOR)") {
+                    playClick();
+                    // MUHAMMED: KYNEX ADMIN ŞİFRESİ (8466) KORUMASI!
+                    String pass = runKeyboard("Silmek icin sifre (8466):");
+                    if(pass == "8466") {
+                        String target = currentPath + (currentPath=="/"?"":"/") + items[clickedIdx].name;
+                        if(items[clickedIdx].isDir) { FFat.rmdir(target); } else { FFat.remove(target); }
+                        playBeep();
+                    } else {
+                        playError();
+                    }
+                    redraw = true; delay(300);
+                }
+            }
+        }
+        delay(10);
+    }
+    currentState = DESKTOP; renderDesktop();
+}
+
 // ---------------- MÜZİK ÇALAR (FFAT ÜZERİNDEN MP3) ----------------
 void loadMusicFiles() {
     musicFiles.clear();
     if(!ffatMounted) {
-        // MUHAMMED: Disk yoksa otomatik formatla ki hata vermesin!
         if(FFat.begin(true, "/ffat", 10, "ffat")) {
             ffatMounted = true;
             Serial.println("[FFAT] Muzik dizini basariyla baglandi!");
@@ -935,8 +1090,8 @@ void loop() {
             }
             else if (tx > 140 && tx <= 220 && ty > 150) { playClick(); bootToRetroGo(); }
             
-            // MUHAMMED: Dosya Yöneticisine Giriş Dokunmatiği Eklendi! (x=230)
             else if (tx > 220 && ty > 15 && ty < 55) { playClick(); currentState = FILE_MANAGER; runFileManager(); }
+            else if (tx > 220 && ty > 60 && ty < 100) { playClick(); currentState = FILES_APP; runFilesApp(); }
             
             else if (ty > 15 && ty < 40) { playClick(); currentState = SETTINGS_HUB; tft.fillScreen(whiteTheme?0xFFFF:0); tft.fillRect(50, 80, 220, 50, 0x07FF); tft.setTextColor(0xFFFF); tft.setCursor(100, 100); tft.print("TEMA DEGISTIR"); tft.fillRect(50, 150, 220, 50, 0x07E0); tft.setCursor(110, 170); tft.print("KAYDET VE CIK"); delay(300); }
             else if (ty > 40 && ty < 70) { playClick(); currentState = SYS_INFO; runSysInfo(); }
