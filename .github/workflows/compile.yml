@@ -1,8 +1,8 @@
 # **************************************************************************
 # * Kynex Sovereign - KynexOs Discrete CI v230.47
 # * Geliştirici: Muhammed (Kynex)
-# * Görev: Separate Bootloader, Partition and Firmware Artifacts
-# * Değişiklik: Merge işlemi kaldırıldı, her bin dosyası bağımsız paketlendi.
+# * Görev: Separate Bootloader, Partition, Firmware and Music Artifacts
+# * Değişiklik: mtools ile MP3'ler FFAT formatinda music.bin olarak eklendi!
 # **************************************************************************
 
 name: KynexOs Sovereign Build v230.0
@@ -40,6 +40,20 @@ jobs:
       - name: KynexOs Derle
         run: pio run
 
+      - name: Music.bin Olustur (FFAT)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mtools dosfstools
+          mkdir -p music
+          # Partitions.csv icindeki 0x7A0000 boyutuna (7808 KB) tam esit bos disk imaji olustur
+          dd if=/dev/zero of=music.bin bs=1024 count=7808
+          # Imaj dosyasini FAT16 olarak formatla
+          mkfs.fat -F 16 music.bin
+          # Imaj icerisine /music klasorunu ac
+          mmd -i music.bin ::/music
+          # Github deposundaki music klasorunun icindeki her seyi imajdaki /music icine kopyala
+          mcopy -i music.bin music/* ::/music/ || true
+
       - name: Sovereign Discrete Pack Yukle
         uses: actions/upload-artifact@v4
         with:
@@ -48,4 +62,5 @@ jobs:
             .pio/build/esp32-s3-devkitc-1/bootloader.bin
             .pio/build/esp32-s3-devkitc-1/partitions.bin
             .pio/build/esp32-s3-devkitc-1/firmware.bin
+            music.bin
           compression-level: 9
