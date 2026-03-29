@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.126 - THE MEDIA UPDATE
+ * KynexOs Sovereign Build v230.127 - THE CRYSTAL CORE
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: MP3 Music Player (FFAT), Anti-Clipping Audio Fix, Dual Matrix
+ * Özellikler: MP3 VFS Path Fixed (/ffat), Dynamic I2S Core Switching (Zero Crackle)
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -25,7 +25,7 @@
 #include "wallpaper.h"
 #include "FS.h"
 #include "FFat.h"
-#include "Audio.h" // MUHAMMED: MP3 Çalar için eklendi! (ESP32-audioI2S kütüphanesi gerekir)
+#include "Audio.h"
 
 // DONANIM PİNLERİ
 #define TFT_SCK 12
@@ -52,7 +52,6 @@
 Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
 XPT2046_Touchscreen touch(TOUCH_CS);
 Preferences prefs;
-Audio audio; // Ses kütüphanesi nesnesi
 
 enum State { DESKTOP, START_MENU, SETTINGS_HUB, WIFI_MENU, BT_MENU, CMD_PROMPT, SYS_INFO, PAINT, TEST_MENU, GAME_MENU, CALCULATOR, POWER_MENU, XOX_GAME, MUSIC_PLAYER };
 State currentState = DESKTOP;
@@ -75,11 +74,7 @@ unsigned long lastMusicUITime = 0;
 
 // ---------------- I2S DİJİTAL SES MOTORU VE ANTI-CLIPPING FIX ----------------
 void initI2S() {
-    Serial.println("[I2S] Baslatma dizisi basladi...");
-    audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
-    audio.setVolume(globalVolume / 4.76); // Audio kütüphanesi 0-21 arası alır
-    
-    // Sistem sesleri için temel I2S ayarı (Audio kütüphanesi devrede değilken kullanılır)
+    Serial.println("[I2S] UI Bip Motoru Kuruluyor...");
     i2s_config_t i2s_config = {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
         .sample_rate = 44100,
@@ -100,22 +95,18 @@ void initI2S() {
         .data_in_num = I2S_PIN_NO_CHANGE
     };
     
-    // Audio nesnesi kendi i2s kurulumunu yaptığı için sadece Müzik çalar dışı manuel I2S gerekirse kurarız.
-    // Ancak playToneI2S'in stabil çalışması için driver'ı biz kuruyoruz. Audio kütüphanesi bunu devralacak.
     i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
     i2s_set_pin(I2S_NUM_0, &pin_config);
 }
 
-// MUHAMMED: Anti-Clipping (Cızırtı Giderici) Algoritma Eklendi!
+// MUHAMMED: Kilitlenme ve cızırtı önleyici düşük genlik zırhı (Max 8000)
 void playToneI2S(float freq, int duration_ms) {
     if (freq <= 0 || globalVolume <= 0) return;
     int sampleRate = 44100;
     int samples = (sampleRate * duration_ms) / 1000;
     size_t bytes_written;
     
-    // Cızırtıyı (Clipping) önlemek için max genliği 16-bit sınırının altında (20000) tutuyoruz.
-    // Eskiden 25000 idi ve ani patlamalarda 32767'yi geçip kare dalga cızırtısı yapıyordu.
-    float max_amplitude = 18000.0; 
+    float max_amplitude = 8000.0; 
     float amplitude = max_amplitude * (globalVolume / 100.0);
     
     for(int i=0; i<samples; i++) {
@@ -130,7 +121,7 @@ void playSquareWaveI2S(float freq, int duration_ms) {
     int sampleRate = 44100;
     int samples = (sampleRate * duration_ms) / 1000;
     size_t bytes_written;
-    float amplitude = 15000.0 * (globalVolume / 100.0); // Cızırtı önlemi için genlik düşürüldü
+    float amplitude = 8000.0 * (globalVolume / 100.0); 
     int half_period = sampleRate / (freq * 2);
     
     for(int i=0; i<samples; i++) {
@@ -144,10 +135,10 @@ void playClick() { playToneI2S(1200, 15); }
 void playBeep() { playToneI2S(1500, 50); } 
 void playError() { playToneI2S(300, 200); } 
 void playBootSound() { 
-    playToneI2S(523.25, 150); delay(50);
-    playToneI2S(659.25, 150); delay(50);
-    playToneI2S(783.99, 150); delay(50);
-    playToneI2S(1046.50, 400); 
+    playToneI2S(523.25, 100); delay(20);
+    playToneI2S(659.25, 100); delay(20);
+    playToneI2S(783.99, 100); delay(20);
+    playToneI2S(1046.50, 300); 
 }
 
 // Dokunmatik Kalibrasyonu 
@@ -188,7 +179,7 @@ void renderStartMenu() {
     tft.setCursor(10, 75);  tft.print("> CMD PROMPT");
     tft.setCursor(10, 105); tft.print("> HESAP MAKINESI");
     tft.setCursor(10, 135); tft.print("> PAINT");
-    tft.setCursor(10, 165); tft.print("> MUZIK CALAR"); // Yeni Menü Öğesi
+    tft.setCursor(10, 165); tft.print("> MUZIK CALAR");
     tft.setCursor(10, 195); tft.print("> OYUNLAR & UYG");
 
     tft.fillRect(140, 15, 80, 40, 0x03FF); tft.setCursor(145, 30); tft.setTextColor(0xFFFF); tft.print("WIFI");
@@ -301,19 +292,20 @@ void runBtManager() {
 void loadMusicFiles() {
     musicFiles.clear();
     if(!ffatMounted) {
-        if(FFat.begin(false, "/sd", 10, "ffat")) {
+        // MUHAMMED: VFS (Sanal Dosya Sistemi) yolu "/ffat" olarak düzeltildi!
+        if(FFat.begin(false, "/ffat", 10, "ffat")) {
             ffatMounted = true;
-            Serial.println("[FFAT] Müzik dizini başarıyla bağlandı!");
+            Serial.println("[FFAT] Muzik dizini basariyla baglandi!");
         } else {
-            Serial.println("[FFAT] HATA: ffat bölümü bulunamadı veya formata ihtiyacı var!");
+            Serial.println("[FFAT] HATA: ffat bolumu bulunamadi!");
             return;
         }
     }
 
-    File dir = FFat.open("/music");
+    // MUHAMMED: Dizin yolu VFS kuralına göre düzeltildi
+    File dir = FFat.open("/ffat/music");
     if (!dir) {
-        Serial.println("[FFAT] /music klasörü yok, oluşturuluyor...");
-        FFat.mkdir("/music");
+        Serial.println("[FFAT] /ffat/music klasoru yok!");
         return;
     }
     
@@ -322,59 +314,49 @@ void loadMusicFiles() {
         if(!file.isDirectory()) {
             String fileName = String(file.name());
             if(fileName.endsWith(".mp3") || fileName.endsWith(".MP3")) {
-                musicFiles.push_back("/music/" + fileName);
+                // Tam yol listeye eklenir
+                musicFiles.push_back(fileName);
             }
         }
         file = dir.openNextFile();
     }
-    if(musicFiles.size() > 0) {
-        Serial.printf("[FFAT] %d adet müzik bulundu.\n", musicFiles.size());
-    } else {
-        Serial.println("[FFAT] /music klasörü boş.");
-    }
 }
 
 void renderMusicPlayerUI() {
-    tft.fillScreen(0x10A2); // Koyu Mavi Arka Plan
+    tft.fillScreen(0x10A2);
     tft.fillRect(0, 0, 320, 35, 0x03FF);
     tft.setTextColor(0xFFFF); tft.setTextSize(2); tft.setCursor(10, 10);
     tft.print("SOVEREIGN MUSIC");
 
     tft.setTextSize(1);
     if(musicFiles.size() == 0) {
-        tft.setCursor(20, 100); tft.print("HATA: /music klasorunde MP3 bulunamadi.");
-        tft.setCursor(20, 120); tft.print("Lutfen FFAT hafizasina dosya yukleyin.");
+        tft.setCursor(20, 100); tft.print("HATA: MP3 bulunamadi.");
+        tft.setCursor(20, 120); tft.print("FFAT hafizasina music.bin yukleyin.");
         tft.fillRect(100, 200, 120, 30, 0xF800); tft.setCursor(135, 210); tft.print("GERI CIK");
         return;
     }
 
-    // Şarkı Adı Gösterimi (Uzunsa Keser)
     tft.fillRect(10, 50, 300, 40, 0x0000);
     tft.setCursor(20, 65);
-    String trackName = musicFiles[currentTrackIndex].substring(7); // "/music/" kısmını atar
+    // Tam yol içerisinden sadece şarkı ismini kesip alıyoruz
+    String fullPath = musicFiles[currentTrackIndex];
+    String trackName = fullPath.substring(fullPath.lastIndexOf('/') + 1);
     if(trackName.length() > 35) trackName = trackName.substring(0, 35) + "...";
     tft.print(trackName);
 
-    // Durum ve Süre Bilgisi
     tft.fillRect(10, 100, 300, 20, 0x10A2);
     tft.setCursor(15, 105);
     tft.setTextColor(0x07E0);
     tft.print(isPlaying ? "OYNATILIYOR..." : "DURDURULDU.");
     tft.setTextColor(0xFFFF);
 
-    // İlerleme Çubuğu (Temsili)
     tft.drawRect(10, 130, 300, 15, 0xFFFF);
     
-    // Kontrol Butonları
-    // Geri
     tft.fillRect(20, 160, 60, 40, 0x3186); tft.setCursor(35, 175); tft.print("<< 10s");
-    // Oynat/Durdur
     tft.fillRect(90, 160, 140, 40, isPlaying ? 0xF800 : 0x07E0); 
     tft.setCursor(120, 175); tft.setTextSize(2); tft.print(isPlaying ? "DURDUR" : "OYNAT"); tft.setTextSize(1);
-    // İleri
     tft.fillRect(240, 160, 60, 40, 0x3186); tft.setCursor(255, 175); tft.print("10s >>");
 
-    // Ses ve Çıkış
     tft.fillRect(10, 210, 140, 25, 0x0000); tft.setCursor(20, 218); tft.printf("SES: %%%d", globalVolume);
     tft.drawRect(150, 210, 160, 25, 0xFFFF); tft.fillRect(150, 210, (globalVolume*160)/100, 25, 0x07E0);
     tft.fillRect(270, 5, 40, 25, 0xF800); tft.setCursor(275, 12); tft.print("CIK");
@@ -396,22 +378,27 @@ void runMusicPlayer() {
         currentState = DESKTOP; renderDesktop(); return;
     }
 
-    // Audio kütüphanesi başlatılıyor
-    audio.setVolume(globalVolume / 4.76); 
-    if(isPlaying) audio.connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
+    // MUHAMMED: DİNAMİK SES MOTORU GEÇİŞİ (Çakışma Koruması)
+    i2s_driver_uninstall(I2S_NUM_0); // 1. UI Bip ses motorunu tamamen sil ve pinleri bırak
+    delay(50);
+    
+    Audio *mp3Audio = new Audio(); // 2. Sadece müzik çalara özel dinamik MP3 motoru oluştur
+    mp3Audio->setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
+    mp3Audio->setVolume(globalVolume / 4.76); 
+    
+    if(isPlaying) mp3Audio->connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
 
     bool forceExit = false;
     while(digitalRead(JOY_SELECT) == HIGH && !forceExit) {
         esp_task_wdt_reset();
         
         if(isPlaying) {
-            audio.loop(); // Ses dosyasını işlemeye devam et
+            mp3Audio->loop(); 
             
-            // UI Güncelleme (Her saniye)
             if(millis() - lastMusicUITime > 1000) {
-                tft.fillRect(10, 130, 300, 15, 0x0000); // İlerleme çubuğu içi
-                int currentSec = audio.getAudioCurrentTime();
-                int totalSec = audio.getAudioFileDuration();
+                tft.fillRect(10, 130, 300, 15, 0x0000); 
+                int currentSec = mp3Audio->getAudioCurrentTime();
+                int totalSec = mp3Audio->getAudioFileDuration();
                 if(totalSec > 0) {
                     int barWidth = (currentSec * 300) / totalSec;
                     tft.fillRect(10, 130, barWidth, 15, 0x07E0);
@@ -423,46 +410,38 @@ void runMusicPlayer() {
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
             
-            // Çıkış Butonu
-            if(tx > 260 && ty < 40) { playClick(); audio.stopSong(); isPlaying = false; forceExit = true; }
+            if(tx > 260 && ty < 40) { mp3Audio->stopSong(); isPlaying = false; forceExit = true; }
             
-            // Oynat / Durdur
             else if(tx > 90 && tx < 230 && ty > 150 && ty < 205) {
-                playClick();
                 isPlaying = !isPlaying;
                 if(isPlaying) {
-                    audio.connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
+                    mp3Audio->connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
                 } else {
-                    audio.stopSong();
+                    mp3Audio->stopSong();
                 }
                 renderMusicPlayerUI();
                 delay(300);
             }
             
-            // Sonraki Şarkı / İleri Sar
             else if(tx >= 240 && ty > 150 && ty < 205) {
-                playClick();
-                int currentSec = audio.getAudioCurrentTime();
-                audio.setAudioPlayPosition(currentSec + 10); // 10 Saniye İleri
+                int currentSec = mp3Audio->getAudioCurrentTime();
+                mp3Audio->setAudioPlayPosition(currentSec + 10); 
                 delay(300);
             }
             
-            // Önceki Şarkı / Geri Sar
             else if(tx <= 80 && ty > 150 && ty < 205) {
-                playClick();
-                int currentSec = audio.getAudioCurrentTime();
+                int currentSec = mp3Audio->getAudioCurrentTime();
                 int newPos = currentSec - 10;
                 if(newPos < 0) newPos = 0;
-                audio.setAudioPlayPosition(newPos); // 10 Saniye Geri
+                mp3Audio->setAudioPlayPosition(newPos); 
                 delay(300);
             }
 
-            // Ses Ayarı
             else if(tx > 150 && ty > 205) {
                 globalVolume = ((tx - 150) * 100) / 160;
                 if(globalVolume < 0) globalVolume = 0; if(globalVolume > 100) globalVolume = 100;
                 prefs.putInt("vol", globalVolume);
-                audio.setVolume(globalVolume / 4.76);
+                mp3Audio->setVolume(globalVolume / 4.76);
                 
                 tft.fillRect(10, 210, 140, 25, 0x0000); tft.setCursor(20, 218); tft.printf("SES: %%%d", globalVolume);
                 tft.fillRect(150, 210, 160, 25, 0x0000); 
@@ -473,9 +452,12 @@ void runMusicPlayer() {
         }
     }
     
-    // Çıkışta ses motorunu sistem bip moduna geri al
-    audio.stopSong();
-    initI2S(); 
+    // MUHAMMED: Çıkışta ses çakışmasını engellemek için geri dönüş!
+    mp3Audio->stopSong();
+    delete mp3Audio; // 3. MP3 motorunu tamamen parçala ve belekten sil
+    delay(50);
+    initI2S(); // 4. UI Bip motorunu kendi kurallarıyla tekrar inşa et!
+    
     currentState = DESKTOP; renderDesktop();
 }
 
@@ -697,7 +679,6 @@ void runPong() {
         int j1y = raw_j1x; 
         p1y = map(j1y, 0, 4095, 0, 205); 
         
-        // MUHAMMED: J2 İÇİN KUSURSUZ 90 DERECE İKİZ MATRİS (Y Ekseni Yönü)
         int raw_j2x = analogRead(J2_X); 
         int j2y = raw_j2x; 
         p2y = map(j2y, 0, 4095, 0, 205); 
@@ -740,7 +721,6 @@ void runJoyTest() {
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         
-        // MUHAMMED: İki Joystick için Mükemmel İkiz 90 Derece Matris 
         int raw_j1x = analogRead(J1_X); int raw_j1y = analogRead(J1_Y);
         int j1x = 4095 - raw_j1y; 
         int j1y = raw_j1x;
@@ -861,7 +841,7 @@ void loop() {
             else if (ty > 70 && ty < 100) { playClick(); currentState = CMD_PROMPT; runCMD(); }
             else if (ty > 100 && ty < 130) { playClick(); currentState = CALCULATOR; runCalculator(); }
             else if (ty > 130 && ty < 160) { playClick(); currentState = PAINT; runPaintApp(); }
-            else if (ty > 160 && ty < 190) { playClick(); currentState = MUSIC_PLAYER; runMusicPlayer(); } // Yeni Menü
+            else if (ty > 160 && ty < 190) { playClick(); currentState = MUSIC_PLAYER; runMusicPlayer(); } 
             else if (ty > 190) { 
                 playClick(); currentState = GAME_MENU; 
                 tft.fillRect(161, 100, 130, 125, 0x1084); 
