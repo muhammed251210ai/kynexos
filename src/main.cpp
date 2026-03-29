@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.FINAL - THE SOVEREIGN OS
+ * KynexOs Sovereign Build v230.132 - THE GHOST ARMOR
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Ghost Touch Fix (delay300), Pro MP3 Player (Next/Prev & Vol Bar)
+ * Özellikler: clearTouchGhost() Anti-Crash System, Stable Apps, Pro MP3 Player
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -144,6 +144,15 @@ void playBootSound() {
     playToneI2S(1046.50, 300); 
 }
 
+// MUHAMMED: HAYALET DOKUNUŞLARI (GHOST TOUCH) YOK EDEN ZIRH KALKANI!
+void clearTouchGhost() {
+    delay(50); // Parmağın kalkması için son tolerans
+    while(touch.touched()) { 
+        touch.getPoint(); // Kalan sahte sinyalleri çekip yutar
+        delay(10); 
+    }
+}
+
 // Dokunmatik Kalibrasyonu 
 int getTX(int rawX) { 
     int tx = map(rawX, 3900, 150, 0, 320) + 15; 
@@ -177,12 +186,14 @@ void renderStartMenu() {
     tft.fillRect(0, 5, 240, 210, whiteTheme ? 0xFFFF : 0x2104);
     tft.drawRect(0, 5, 240, 210, 0x07FF);
     tft.setTextColor(whiteTheme ? 0x0000 : 0xFFFF);
-    tft.setCursor(10, 15);  tft.print("> AGLAR (WIFI/BT)");
-    tft.setCursor(10, 45);  tft.print("> AYARLAR & SISTEM");
-    tft.setCursor(10, 75);  tft.print("> CMD PROMPT");
-    tft.setCursor(10, 105); tft.print("> HESAP MAKINESI");
-    tft.setCursor(10, 135); tft.print("> PAINT");
-    tft.setCursor(10, 165); tft.print("> MUZIK CALAR");
+    
+    tft.setCursor(10, 20);  tft.print("> TEMA AYARI");
+    tft.setCursor(10, 45);  tft.print("> SISTEM PANELI");
+    tft.setCursor(10, 70);  tft.print("> CMD PROMPT");
+    tft.setCursor(10, 95);  tft.print("> HESAP MAKINESI");
+    tft.setCursor(10, 120); tft.print("> PAINT");
+    tft.setCursor(10, 145); tft.print("> TESTLER");
+    tft.setCursor(10, 170); tft.print("> MUZIK CALAR");
     tft.setCursor(10, 195); tft.print("> OYUNLAR & UYG");
 
     tft.fillRect(140, 15, 80, 40, 0x03FF); tft.setCursor(145, 30); tft.setTextColor(0xFFFF); tft.print("WIFI");
@@ -202,6 +213,7 @@ String runKeyboard(String prompt) {
     const char* keysN[3][10] = { {"1","2","3","4","5","6","7","8","9","0"}, {"!","#","$","%","&","*","+","=","/","?"}, {"(",")","<",">","[","]","{","}",":",";"} };
 
     tft.fillScreen(0x0000); bool drawKeys = true;
+    clearTouchGhost();
     while(true) {
         esp_task_wdt_reset();
         if(drawKeys) {
@@ -236,9 +248,9 @@ String runKeyboard(String prompt) {
                 else if(tx < 120) { mode = (mode==1) ? 0 : 1; drawKeys = true; } 
                 else if(tx < 200) { input += " "; drawKeys = true; } 
                 else if(tx < 260) { if(input.length()>0) input.remove(input.length()-1); drawKeys = true; } 
-                else if(tx >= 260) { playBeep(); return input; } 
+                else if(tx >= 260) { playBeep(); clearTouchGhost(); return input; } 
             }
-            delay(200); 
+            clearTouchGhost(); 
         }
     }
 }
@@ -254,6 +266,7 @@ void runWifiManager() {
     tft.fillRect(10, 200, 140, 35, 0xF800); tft.setCursor(20, 210); tft.print("GERI (CIKIS)");
     tft.fillRect(160, 200, 150, 35, apState ? 0xF800 : 0x07E0); tft.setCursor(170, 210); tft.print(apState ? "HOTSPOT KAPAT" : "HOTSPOT AC");
 
+    clearTouchGhost();
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         if (touch.touched()) {
@@ -275,7 +288,7 @@ void runWifiManager() {
                     delay(2000); break;
                 }
             } 
-            else if(ty > 200 && tx < 150) { delay(300); break; } 
+            else if(ty > 200 && tx < 150) { clearTouchGhost(); break; } 
             else if(ty > 200 && tx > 160) {
                 apState = !apState;
                 if(apState) {
@@ -287,11 +300,11 @@ void runWifiManager() {
                 tft.setCursor(170, 210); tft.setTextColor(apState ? 0xFFFF : 0x0000);
                 tft.print(apState ? "HOTSPOT KAPAT" : "HOTSPOT AC");
                 tft.setTextColor(0xFFFF);
-                delay(300);
+                clearTouchGhost();
             }
-            delay(10);
         }
     }
+    clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
 
@@ -300,14 +313,17 @@ void runBtManager() {
     tft.fillRect(50, 80, 220, 50, btState ? 0xF800 : 0x07E0);
     tft.setCursor(90, 100); tft.print(btState ? "BLUETOOTH KAPAT" : "BLUETOOTH AC");
     tft.fillRect(50, 150, 220, 50, 0x03FF); tft.setCursor(130, 170); tft.print("GERI");
+    
+    clearTouchGhost();
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         if (touch.touched()) {
             playClick(); TS_Point p = touch.getPoint(); int ty = getTY(p.y);
-            if(ty > 80 && ty < 130) { btState = !btState; if(btState) btStart(); else btStop(); playBeep(); delay(300); break; }
-            if(ty > 150 && ty < 200) { delay(300); break; }
+            if(ty > 80 && ty < 130) { btState = !btState; if(btState) btStart(); else btStop(); playBeep(); clearTouchGhost(); break; }
+            if(ty > 150 && ty < 200) { clearTouchGhost(); break; }
         }
     }
+    clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
 
@@ -395,7 +411,7 @@ void runFileManager() {
         tft.fillScreen(0xF800); tft.setTextColor(0xFFFF); tft.setTextSize(1);
         tft.setCursor(10, 100); tft.print("HATA: WIFI VEYA HOTSPOT YOK!");
         tft.setCursor(10, 120); tft.print("Once Aglar menusunden baglanin/HOTSPOT acin.");
-        delay(3000); currentState = DESKTOP; renderDesktop(); return;
+        delay(3000); clearTouchGhost(); currentState = DESKTOP; renderDesktop(); return;
     }
     
     if(!ffatMounted) {
@@ -404,7 +420,7 @@ void runFileManager() {
             ffatMounted = true;
         } else {
             tft.fillScreen(0xF800); tft.setCursor(10, 100); tft.print("HATA: DONANIMSAL DISK HATASI!"); delay(3000);
-            currentState = DESKTOP; renderDesktop(); return;
+            clearTouchGhost(); currentState = DESKTOP; renderDesktop(); return;
         }
     }
 
@@ -434,17 +450,19 @@ void runFileManager() {
     
     server.begin();
 
+    clearTouchGhost();
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         server.handleClient();
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int ty = getTY(p.y);
-            if(ty > 190) { playClick(); delay(300); break; }
+            if(ty > 190) { playClick(); clearTouchGhost(); break; }
         }
         delay(10);
     }
     
     server.stop();
+    clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
 
@@ -453,7 +471,7 @@ void runFilesApp() {
     if(!ffatMounted) { 
         tft.fillScreen(0x0000); tft.setCursor(10, 100); tft.print("Disk kontrol ediliyor...");
         if(FFat.begin(true, "/ffat", 10, "ffat")) ffatMounted = true; 
-        else { currentState = DESKTOP; renderDesktop(); return; } 
+        else { clearTouchGhost(); currentState = DESKTOP; renderDesktop(); return; } 
     }
     
     String currentPath = "/";
@@ -463,6 +481,7 @@ void runFilesApp() {
     struct FInfo { String name; bool isDir; };
     std::vector<FInfo> items;
     
+    clearTouchGhost();
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         
@@ -506,13 +525,13 @@ void runFilesApp() {
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
             
-            if(tx > 260 && ty > 215) { playClick(); delay(300); break; } 
-            else if(tx > 260 && ty > 40 && ty < 120) { playClick(); if(scrollY > 0) scrollY--; redraw = true; delay(200); } 
-            else if(tx > 260 && ty > 130 && ty < 210) { playClick(); if(scrollY < items.size()-1) scrollY++; redraw = true; delay(200); } 
+            if(tx > 260 && ty > 215) { playClick(); clearTouchGhost(); break; } 
+            else if(tx > 260 && ty > 40 && ty < 120) { playClick(); if(scrollY > 0) scrollY--; redraw = true; clearTouchGhost(); } 
+            else if(tx > 260 && ty > 130 && ty < 210) { playClick(); if(scrollY < items.size()-1) scrollY++; redraw = true; clearTouchGhost(); } 
             else if(tx < 200 && ty > 40 && ty < 220) { 
                 int clickedIdx = scrollY + ((ty - 40) / 45);
                 if(clickedIdx < items.size()) {
-                    playClick();
+                    playClick(); clearTouchGhost();
                     if(items[clickedIdx].isDir) {
                         if(items[clickedIdx].name == ".. (UST KLASOR)") {
                             currentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
@@ -520,14 +539,14 @@ void runFilesApp() {
                         } else {
                             currentPath += (currentPath=="/"?"":"/") + items[clickedIdx].name;
                         }
-                        scrollY = 0; redraw = true; delay(300);
+                        scrollY = 0; redraw = true;
                     }
                 }
             }
             else if(tx > 200 && tx < 250 && ty > 40 && ty < 220) { 
                 int clickedIdx = scrollY + ((ty - 40) / 45);
                 if(clickedIdx < items.size() && items[clickedIdx].name != ".. (UST KLASOR)") {
-                    playClick();
+                    playClick(); clearTouchGhost();
                     String pass = runKeyboard("Silmek icin sifre (8466):");
                     if(pass == "8466") {
                         String target = currentPath + (currentPath=="/"?"":"/") + items[clickedIdx].name;
@@ -536,12 +555,13 @@ void runFilesApp() {
                     } else {
                         playError();
                     }
-                    redraw = true; delay(300);
+                    redraw = true; clearTouchGhost();
                 }
             }
         }
         delay(10);
     }
+    clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
 
@@ -604,7 +624,6 @@ void renderMusicPlayerUI() {
 
     tft.drawRect(10, 130, 300, 15, 0xFFFF);
     
-    // MUHAMMED: İleri-Geri Şarkı Atlatma Butonları
     tft.fillRect(20, 150, 60, 40, 0x3186); tft.setCursor(30, 165); tft.print("<< GERI");
     tft.fillRect(90, 150, 130, 40, isPlaying ? 0xF800 : 0x07E0); 
     tft.setCursor(110, 165); tft.setTextSize(2); tft.print(isPlaying ? "DURDUR" : "OYNAT"); tft.setTextSize(1);
@@ -622,15 +641,16 @@ void runMusicPlayer() {
     renderMusicPlayerUI();
     
     if(musicFiles.size() == 0) {
+        clearTouchGhost();
         while(digitalRead(JOY_SELECT) == HIGH) {
             esp_task_wdt_reset();
             if(touch.touched()) {
                 TS_Point p = touch.getPoint(); int ty = getTY(p.y);
-                if(ty > 190) { playClick(); delay(300); break; }
+                if(ty > 190) { playClick(); clearTouchGhost(); break; }
             }
             delay(10);
         }
-        currentState = DESKTOP; renderDesktop(); return;
+        clearTouchGhost(); currentState = DESKTOP; renderDesktop(); return;
     }
 
     i2s_driver_uninstall(I2S_NUM_0); 
@@ -643,6 +663,7 @@ void runMusicPlayer() {
     if(isPlaying) mp3Audio->connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
 
     bool forceExit = false;
+    clearTouchGhost();
     while(digitalRead(JOY_SELECT) == HIGH && !forceExit) {
         esp_task_wdt_reset();
         
@@ -664,32 +685,32 @@ void runMusicPlayer() {
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
             
-            if(tx > 260 && ty < 40) { mp3Audio->stopSong(); isPlaying = false; forceExit = true; playClick(); delay(300); }
+            if(tx > 260 && ty < 40) { mp3Audio->stopSong(); isPlaying = false; forceExit = true; playClick(); clearTouchGhost(); }
             
             else if(ty > 150 && ty < 195) {
-                if(tx <= 90) { // Önceki Şarkı
+                if(tx <= 90) { 
                     if(currentTrackIndex > 0) currentTrackIndex--; else currentTrackIndex = musicFiles.size() - 1;
                     isPlaying = true;
                     mp3Audio->stopSong(); 
                     mp3Audio->connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
-                    renderMusicPlayerUI(); delay(300);
+                    renderMusicPlayerUI(); clearTouchGhost();
                 } 
-                else if(tx >= 230) { // Sonraki Şarkı
+                else if(tx >= 230) { 
                     if(currentTrackIndex < musicFiles.size() - 1) currentTrackIndex++; else currentTrackIndex = 0;
                     isPlaying = true;
                     mp3Audio->stopSong(); 
                     mp3Audio->connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
-                    renderMusicPlayerUI(); delay(300);
+                    renderMusicPlayerUI(); clearTouchGhost();
                 } 
-                else { // Oynat - Durdur
+                else { 
                     isPlaying = !isPlaying;
                     if(isPlaying) mp3Audio->connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
                     else mp3Audio->stopSong();
-                    renderMusicPlayerUI(); delay(300);
+                    renderMusicPlayerUI(); clearTouchGhost();
                 }
             }
             
-            else if(ty > 200) { // Ses Ayarı Barı (x=80'den Başlar)
+            else if(ty > 200) { 
                 if(tx > 80) {
                     globalVolume = ((tx - 80) * 100) / 230;
                     if(globalVolume < 0) globalVolume = 0; if(globalVolume > 100) globalVolume = 100;
@@ -700,7 +721,7 @@ void runMusicPlayer() {
                     tft.fillRect(80, 205, 230, 25, 0x0000); 
                     tft.fillRect(80, 205, (globalVolume*230)/100, 25, 0x07E0);
                     tft.drawRect(80, 205, 230, 25, 0xFFFF);
-                    delay(50);
+                    clearTouchGhost();
                 }
             }
         }
@@ -711,13 +732,15 @@ void runMusicPlayer() {
     delay(50);
     initI2S(); 
     
+    clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
 
 // ---------------- HESAP MAKİNESİ & CMD & SYS INFO ----------------
 void runCalculator() {
     String eq = ""; const char* cKeys[4][4] = { {"7","8","9","/"}, {"4","5","6","*"}, {"1","2","3","-"}, {"C","0","=","+"} };
-    tft.fillScreen(0x0000); bool drawC = true; delay(300);
+    tft.fillScreen(0x0000); bool drawC = true; 
+    clearTouchGhost();
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         if(drawC) {
@@ -737,9 +760,10 @@ void runCalculator() {
                     String k = cKeys[r][c]; if(k == "C") eq = ""; else if(k == "=") eq = "Hesaplandi"; else eq += k;
                     drawC = true;
                 }
-            } delay(200);
+            } clearTouchGhost();
         }
     }
+    clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
 
@@ -753,7 +777,10 @@ void runCMD() {
     tft.print("   IPv4 Adresi. . . . . : "); tft.println(WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "Bagli Degil");
     tft.println("\nC:\\KynexOS\\System32> _");
     tft.setTextColor(0xF800); tft.setCursor(0, 230); tft.print("SELECT ILE CIKIS YAPIN");
+    
+    clearTouchGhost();
     while(digitalRead(JOY_SELECT) == HIGH) { esp_task_wdt_reset(); delay(50); }
+    clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
 
@@ -765,7 +792,10 @@ void runSysInfo() {
     tft.setCursor(10, 110); tft.printf("PSRAM: %d KB", ESP.getFreePsram()/1024);
     tft.setCursor(10, 140); tft.print("WIFI IP: " + (WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "OFFLINE"));
     tft.setTextColor(0xF800); tft.setCursor(10, 210); tft.print("SELECT TUSU CIKIS");
+    
+    clearTouchGhost();
     while(digitalRead(JOY_SELECT) == HIGH) { esp_task_wdt_reset(); delay(100); }
+    clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
 
@@ -786,7 +816,7 @@ void runXOX() {
     tft.drawLine(70, 90, 250, 90, 0xFFFF);   
     tft.drawLine(70, 150, 250, 150, 0xFFFF); 
     
-    delay(300);
+    clearTouchGhost();
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         if (touch.touched() && winner == 0) {
@@ -847,9 +877,10 @@ void runXOX() {
                     }
                 }
             }
-            delay(200);
+            clearTouchGhost();
         }
     }
+    clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
 
@@ -858,8 +889,8 @@ void runPianoApp() {
     for(int i=0; i<8; i++) tft.fillRect(i*40, 40, 38, 200, 0xFFFF); 
     int bKeys[] = {1, 2, 4, 5, 6}; 
     for(int i=0; i<5; i++) tft.fillRect(bKeys[i]*40 - 10, 40, 20, 120, 0x0000);
-    delay(300);
     
+    clearTouchGhost();
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         if(touch.touched()) {
@@ -875,11 +906,13 @@ void runPianoApp() {
             }
         }
     }
+    clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
 
 void run3DCube() {
-    tft.fillScreen(0x0000); float ax=0, ay=0; delay(300);
+    tft.fillScreen(0x0000); float ax=0, ay=0; 
+    clearTouchGhost();
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset(); ax += 0.05; ay += 0.03; 
         tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(10,10); tft.print("3D AUTO CUBE - SELECT CIKIS");
@@ -888,13 +921,15 @@ void run3DCube() {
         tft.drawLine(110+sin(ax)*20, 170+cos(ay)*20, 130+sin(ax)*20, 190+cos(ay)*20, 0x07E0); tft.drawLine(210+sin(ax)*20, 170+cos(ay)*20, 230+sin(ax)*20, 190+cos(ay)*20, 0x07E0);
         delay(30);
     }
+    clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
 
 void runSnake() {
     int x[50], y[50], len=5, dx=8, dy=0, ax=160, ay=120, score=0;
     for(int i=0;i<50;i++){x[i]=-10;y[i]=-10;} x[0]=160; y[0]=120;
-    tft.fillScreen(0x0000); tft.fillCircle(ax+4, ay+4, 4, 0xF800); delay(300);
+    tft.fillScreen(0x0000); tft.fillCircle(ax+4, ay+4, 4, 0xF800); 
+    clearTouchGhost();
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         
@@ -919,11 +954,13 @@ void runSnake() {
             delay(2000); break;
         } delay(60); 
     }
+    clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
 
 void runPong() {
-    int p1y=100, p2y=100, bx=160, by=120, bdx=3, bdy=3, s1=0, s2=0; tft.fillScreen(0); delay(300);
+    int p1y=100, p2y=100, bx=160, by=120, bdx=3, bdy=3, s1=0, s2=0; tft.fillScreen(0); 
+    clearTouchGhost();
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         
@@ -945,31 +982,35 @@ void runPong() {
         if(bx>320) { s1++; bx=160; by=120; playToneI2S(300, 300); delay(500); } 
         delay(20);
     }
+    clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
 
 void runPaintApp() {
     tft.fillScreen(0xFFFF); tft.fillRect(280, 0, 40, 240, 0xC618);
     tft.fillRect(285, 10, 30, 30, 0xF800); tft.fillRect(285, 50, 30, 30, 0x07E0); tft.fillRect(285, 90, 30, 30, 0x001F); tft.fillRect(285, 130, 30, 30, 0xFFE0);
-    tft.fillRect(285, 170, 30, 30, 0x0000); tft.fillRect(285, 210, 30, 25, 0xF81F); delay(300);
+    tft.fillRect(285, 170, 30, 30, 0x0000); tft.fillRect(285, 210, 30, 25, 0xF81F); 
+    clearTouchGhost();
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         if (touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
             if (tx > 280) {
                 playClick();
-                if (ty > 210) { delay(300); break; }
+                if (ty > 210) { clearTouchGhost(); break; }
                 else if (ty > 10 && ty < 40) paintColor = 0xF800; else if (ty > 50 && ty < 80) paintColor = 0x07E0;
                 else if (ty > 90 && ty < 120) paintColor = 0x001F; else if (ty > 130 && ty < 160) paintColor = 0xFFE0;
                 else if (ty > 170 && ty < 200) paintColor = 0xFFFF; delay(100);
             } else tft.fillCircle(tx, ty, 3, paintColor);
         }
     }
+    clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
 
 void runJoyTest() {
-    tft.fillScreen(0x0000); delay(300);
+    tft.fillScreen(0x0000); 
+    clearTouchGhost();
     while(digitalRead(JOY_SELECT) == HIGH) {
         esp_task_wdt_reset();
         
@@ -985,6 +1026,7 @@ void runJoyTest() {
         tft.fillRect(170, 50, 130, 100, 0x1084); tft.setCursor(175, 60); tft.setTextColor(0xFFFF); tft.printf("SAG JOY\nX:%d Y:%d", j2x, j2y); tft.fillCircle(170 + map(j2x, 0, 4095, 5, 125), 50 + map(j2y, 0, 4095, 5, 95), 4, 0x07E0);
         delay(30);
     }
+    clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
 
@@ -1007,7 +1049,7 @@ void bootToRetroGo() {
     } else {
         tft.fillScreen(0xF800); tft.setTextColor(0xFFFF); tft.setTextSize(1); tft.setCursor(20, 120); 
         tft.print("HATA: 0x410000 ADRESINDE PARTITION YOK!");
-        delay(3000); currentState = DESKTOP; renderDesktop();
+        delay(3000); clearTouchGhost(); currentState = DESKTOP; renderDesktop();
     }
 }
 
@@ -1052,7 +1094,9 @@ void loop() {
     if (digitalRead(JOY_SELECT) == LOW) {
         if (pressTimer == 0) pressTimer = millis();
         if (millis() - pressTimer > 2000 && !isLongPress) {
-            playBeep(); isLongPress = true; currentState = POWER_MENU;
+            playBeep(); isLongPress = true; 
+            clearTouchGhost();
+            currentState = POWER_MENU;
             tft.fillScreen(0x0000); 
             tft.fillRect(30, 20, 260, 200, 0xF800); 
             tft.setTextColor(0xFFFF); tft.setCursor(110, 35); tft.print("GUC & SES");
@@ -1061,7 +1105,6 @@ void loop() {
             tft.setCursor(40, 145); tft.print("SES:");
             tft.drawRect(85, 140, 170, 20, 0xFFFF); tft.fillRect(85, 140, (globalVolume*170)/100, 20, 0x07E0);
             tft.fillRect(50, 175, 220, 30, 0x10A2); tft.setCursor(140, 185); tft.print("GERI"); 
-            delay(500);
         }
     } else { pressTimer = 0; isLongPress = false; }
 
@@ -1069,14 +1112,13 @@ void loop() {
         TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
 
         if (currentState == DESKTOP) {
-            if (tx < 50 && ty > 210) { playClick(); delay(300); currentState = START_MENU; renderStartMenu(); }
+            if (tx < 50 && ty > 210) { playClick(); clearTouchGhost(); currentState = START_MENU; renderStartMenu(); }
         } 
         else if (currentState == START_MENU) {
-            // MUHAMMED: BÜTÜN MENÜ TUŞLARINDA HAYALET DOKUNUŞU ENGELLEYEN "delay(300)" KALKANI!
-            if (tx > 140 && tx <= 220 && ty > 15 && ty < 55) { playClick(); delay(300); currentState = WIFI_MENU; runWifiManager(); }
-            else if (tx > 140 && tx <= 220 && ty > 60 && ty < 100) { playClick(); delay(300); currentState = BT_MENU; runBtManager(); }
+            if (tx > 140 && tx <= 220 && ty > 15 && ty < 55) { playClick(); clearTouchGhost(); currentState = WIFI_MENU; runWifiManager(); }
+            else if (tx > 140 && tx <= 220 && ty > 60 && ty < 100) { playClick(); clearTouchGhost(); currentState = BT_MENU; runBtManager(); }
             else if (tx > 140 && tx <= 220 && ty > 105 && ty < 145) { 
-                playClick(); delay(300); currentState = POWER_MENU;
+                playClick(); clearTouchGhost(); currentState = POWER_MENU;
                 tft.fillScreen(0x0000); 
                 tft.fillRect(30, 20, 260, 200, 0xF800); 
                 tft.setTextColor(0xFFFF); tft.setCursor(110, 35); tft.print("GUC & SES");
@@ -1086,36 +1128,41 @@ void loop() {
                 tft.drawRect(85, 140, 170, 20, 0xFFFF); tft.fillRect(85, 140, (globalVolume*170)/100, 20, 0x07E0);
                 tft.fillRect(50, 175, 220, 30, 0x10A2); tft.setCursor(140, 185); tft.print("GERI"); 
             }
-            else if (tx > 140 && tx <= 220 && ty > 150) { playClick(); delay(300); bootToRetroGo(); }
+            else if (tx > 140 && tx <= 220 && ty > 150) { playClick(); clearTouchGhost(); bootToRetroGo(); }
+            else if (tx > 220 && ty > 15 && ty < 55) { playClick(); clearTouchGhost(); currentState = FILE_MANAGER; runFileManager(); }
+            else if (tx > 220 && ty > 60 && ty < 100) { playClick(); clearTouchGhost(); currentState = FILES_APP; runFilesApp(); }
             
-            else if (tx > 220 && ty > 15 && ty < 55) { playClick(); delay(300); currentState = FILE_MANAGER; runFileManager(); }
-            else if (tx > 220 && ty > 60 && ty < 100) { playClick(); delay(300); currentState = FILES_APP; runFilesApp(); }
-            
-            else if (ty > 15 && ty < 40) { playClick(); delay(300); currentState = SETTINGS_HUB; tft.fillScreen(whiteTheme?0xFFFF:0); tft.fillRect(50, 80, 220, 50, 0x07FF); tft.setTextColor(0xFFFF); tft.setCursor(100, 100); tft.print("TEMA DEGISTIR"); tft.fillRect(50, 150, 220, 50, 0x07E0); tft.setCursor(110, 170); tft.print("KAYDET VE CIK"); }
-            else if (ty > 40 && ty < 70) { playClick(); delay(300); currentState = SYS_INFO; runSysInfo(); }
-            else if (ty > 70 && ty < 100) { playClick(); delay(300); currentState = CMD_PROMPT; runCMD(); }
-            else if (ty > 100 && ty < 130) { playClick(); delay(300); currentState = CALCULATOR; runCalculator(); }
-            else if (ty > 130 && ty < 160) { playClick(); delay(300); currentState = PAINT; runPaintApp(); }
-            else if (ty > 160 && ty < 190) { playClick(); delay(300); currentState = MUSIC_PLAYER; runMusicPlayer(); } 
-            else if (ty > 190) { 
-                playClick(); delay(300); currentState = GAME_MENU; 
-                tft.fillRect(161, 100, 130, 125, 0x1084); 
-                tft.drawRect(161, 100, 130, 125, 0xF81F); 
+            else if (tx < 140 && ty > 15 && ty < 40) { playClick(); clearTouchGhost(); currentState = SETTINGS_HUB; tft.fillScreen(whiteTheme?0xFFFF:0); tft.fillRect(50, 80, 220, 50, 0x07FF); tft.setTextColor(0xFFFF); tft.setCursor(100, 100); tft.print("TEMA DEGISTIR"); tft.fillRect(50, 150, 220, 50, 0x07E0); tft.setCursor(110, 170); tft.print("KAYDET VE CIK"); }
+            else if (tx < 140 && ty >= 40 && ty < 65) { playClick(); clearTouchGhost(); currentState = SYS_INFO; runSysInfo(); }
+            else if (tx < 140 && ty >= 65 && ty < 90) { playClick(); clearTouchGhost(); currentState = CMD_PROMPT; runCMD(); }
+            else if (tx < 140 && ty >= 90 && ty < 115) { playClick(); clearTouchGhost(); currentState = CALCULATOR; runCalculator(); }
+            else if (tx < 140 && ty >= 115 && ty < 140) { playClick(); clearTouchGhost(); currentState = PAINT; runPaintApp(); }
+            else if (tx < 140 && ty >= 140 && ty < 165) { 
+                playClick(); clearTouchGhost(); currentState = TEST_MENU; 
+                tft.fillRect(161, 150, 130, 75, 0x1084); tft.drawRect(161, 150, 130, 75, 0x07FF); 
+                tft.setCursor(170, 165); tft.print("1. DOKUNMA TEST"); 
+                tft.setCursor(170, 185); tft.print("2. JOYSTICK TEST"); 
+                tft.setCursor(170, 205); tft.print("3. I2S SES TEST"); 
+            }
+            else if (tx < 140 && ty >= 165 && ty < 190) { playClick(); clearTouchGhost(); currentState = MUSIC_PLAYER; runMusicPlayer(); } 
+            else if (tx < 140 && ty >= 190) { 
+                playClick(); clearTouchGhost(); currentState = GAME_MENU; 
+                tft.fillRect(161, 100, 130, 125, 0x1084); tft.drawRect(161, 100, 130, 125, 0xF81F); 
                 tft.setCursor(170, 110); tft.print("1. 3D KUBE"); 
                 tft.setCursor(170, 135); tft.print("2. YILAN"); 
                 tft.setCursor(170, 160); tft.print("3. PONG 2P"); 
                 tft.setCursor(170, 185); tft.print("4. PIYANO"); 
                 tft.setCursor(170, 210); tft.print("5. XOX OYUNU"); 
             }
-            else { delay(300); currentState = DESKTOP; renderDesktop(); }
+            else { clearTouchGhost(); currentState = DESKTOP; renderDesktop(); }
         }
         else if (currentState == SETTINGS_HUB) {
             playClick();
-            if (ty > 80 && ty < 130) { whiteTheme = !whiteTheme; prefs.putBool("theme", whiteTheme); delay(300); }
-            if (ty > 150 && ty < 200) { currentState = DESKTOP; renderDesktop(); delay(300); }
+            if (ty > 80 && ty < 130) { whiteTheme = !whiteTheme; prefs.putBool("theme", whiteTheme); clearTouchGhost(); }
+            if (ty > 150 && ty < 200) { clearTouchGhost(); currentState = DESKTOP; renderDesktop(); }
         }
         else if (currentState == GAME_MENU) {
-            playClick(); delay(300);
+            playClick(); clearTouchGhost();
             if (ty > 100 && ty < 125) run3DCube(); 
             else if (ty > 125 && ty < 150) runSnake(); 
             else if (ty > 150 && ty < 175) runPong(); 
@@ -1124,8 +1171,8 @@ void loop() {
             else { currentState = DESKTOP; renderDesktop(); }
         }
         else if (currentState == TEST_MENU) {
-            playClick(); delay(300);
-            if (ty > 150 && ty < 175) { tft.fillScreen(0xFFFF); tft.setTextColor(0); tft.setCursor(10,10); tft.print("DOKUNMA TEST - SELECT:CIKIS"); delay(300); while(digitalRead(JOY_SELECT)==HIGH) { if(touch.touched()){ TS_Point tp = touch.getPoint(); tft.drawCircle(getTX(tp.x), getTY(tp.y), 10, 0x07FF); } esp_task_wdt_reset(); } currentState = DESKTOP; renderDesktop(); }
+            playClick(); clearTouchGhost();
+            if (ty > 150 && ty < 175) { tft.fillScreen(0xFFFF); tft.setTextColor(0); tft.setCursor(10,10); tft.print("DOKUNMA TEST - SELECT:CIKIS"); clearTouchGhost(); while(digitalRead(JOY_SELECT)==HIGH) { if(touch.touched()){ TS_Point tp = touch.getPoint(); tft.drawCircle(getTX(tp.x), getTY(tp.y), 10, 0x07FF); } esp_task_wdt_reset(); } clearTouchGhost(); currentState = DESKTOP; renderDesktop(); }
             else if (ty > 175 && ty < 195) { runJoyTest(); }
             else if (ty > 195 && ty < 225) { 
                 tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(50, 120); tft.print("I2S SINUS SES TESTI...");
@@ -1143,12 +1190,12 @@ void loop() {
                 tft.fillRect(85, 140, (globalVolume*170)/100, 20, 0x07E0); 
                 tft.drawRect(85, 140, 170, 20, 0xFFFF);
                 playToneI2S(1000, 50); 
-                delay(100);
+                clearTouchGhost();
             }
             else if (tx > 50 && tx < 270 && ty > 55 && ty < 85) { playClick(); tft.fillScreen(0); tft.setCursor(100,120); tft.print("UYKU MODU..."); delay(1000); esp_deep_sleep_start(); }
-            else if (tx > 50 && tx < 270 && ty > 95 && ty < 125) { playBeep(); ESP.restart(); }
-            else if (tx > 50 && tx < 270 && ty > 175 && ty < 205) { playClick(); delay(300); currentState = DESKTOP; renderDesktop(); }
-            else if (tx < 30 || tx > 290 || ty < 20 || ty > 220) { delay(300); currentState = DESKTOP; renderDesktop(); } 
+            else if (tx > 50 && tx < 270 && ty > 95 && ty < 125) { playBeep(); clearTouchGhost(); ESP.restart(); }
+            else if (tx > 50 && tx < 270 && ty > 175 && ty < 205) { playClick(); clearTouchGhost(); currentState = DESKTOP; renderDesktop(); }
+            else if (tx < 30 || tx > 290 || ty < 20 || ty > 220) { clearTouchGhost(); currentState = DESKTOP; renderDesktop(); } 
         }
     }
 }
