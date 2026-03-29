@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.132 - THE GHOST ARMOR
+ * KynexOs Sovereign Build v230.133 - THE TITANIUM CORE
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: clearTouchGhost() Anti-Crash System, Stable Apps, Pro MP3 Player
+ * Özellikler: Absolute Silence Ghost Shield (300ms), Edge Detection, Touch Exits
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -144,12 +144,16 @@ void playBootSound() {
     playToneI2S(1046.50, 300); 
 }
 
-// MUHAMMED: HAYALET DOKUNUŞLARI (GHOST TOUCH) YOK EDEN ZIRH KALKANI!
+// MUHAMMED: TİTANYUM KALKAN (MUTLAK SESSİZLİK)
+// Sistem en az 300ms boyunca ekranda HİÇBİR dokunuş görmeden dönmez!
 void clearTouchGhost() {
-    delay(50); // Parmağın kalkması için son tolerans
-    while(touch.touched()) { 
-        touch.getPoint(); // Kalan sahte sinyalleri çekip yutar
-        delay(10); 
+    unsigned long silenceStart = millis();
+    while(millis() - silenceStart < 300) {
+        if(touch.touched()) {
+            touch.getPoint(); // Veriyi yut
+            silenceStart = millis(); // Süreyi sıfırla! (Sessizlik baştan başlar)
+        }
+        delay(10);
     }
 }
 
@@ -214,8 +218,17 @@ String runKeyboard(String prompt) {
 
     tft.fillScreen(0x0000); bool drawKeys = true;
     clearTouchGhost();
-    while(true) {
+    
+    bool running = true;
+    bool lastBtn = digitalRead(JOY_SELECT);
+    
+    while(running) {
         esp_task_wdt_reset();
+        
+        bool currBtn = digitalRead(JOY_SELECT);
+        if(lastBtn == HIGH && currBtn == LOW) running = false;
+        lastBtn = currBtn;
+
         if(drawKeys) {
             tft.fillRect(0, 0, 320, 80, 0x10A2);
             tft.setTextColor(0xFFFF); tft.setTextSize(1); tft.setCursor(10, 10); tft.print(prompt);
@@ -250,9 +263,11 @@ String runKeyboard(String prompt) {
                 else if(tx < 260) { if(input.length()>0) input.remove(input.length()-1); drawKeys = true; } 
                 else if(tx >= 260) { playBeep(); clearTouchGhost(); return input; } 
             }
-            clearTouchGhost(); 
+            delay(150); 
         }
     }
+    clearTouchGhost();
+    return input;
 }
 
 // ---------------- AĞ VE BT ----------------
@@ -267,8 +282,16 @@ void runWifiManager() {
     tft.fillRect(160, 200, 150, 35, apState ? 0xF800 : 0x07E0); tft.setCursor(170, 210); tft.print(apState ? "HOTSPOT KAPAT" : "HOTSPOT AC");
 
     clearTouchGhost();
-    while(digitalRead(JOY_SELECT) == HIGH) {
+    bool running = true;
+    bool lastBtn = digitalRead(JOY_SELECT);
+
+    while(running) {
         esp_task_wdt_reset();
+        
+        bool currBtn = digitalRead(JOY_SELECT);
+        if(lastBtn == HIGH && currBtn == LOW) running = false;
+        lastBtn = currBtn;
+
         if (touch.touched()) {
             playClick(); TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
             if(ty > 40 && ty < 190) { 
@@ -285,10 +308,10 @@ void runWifiManager() {
                         tft.fillScreen(0x07E0); tft.setCursor(100, 120); tft.setTextColor(0x0000); tft.print("WIFI BAGLANDI!");
                         playBeep();
                     } else { tft.fillScreen(0xF800); tft.setCursor(100, 120); tft.setTextColor(0xFFFF); tft.print("BAGLANTI HATASI!"); playError(); }
-                    delay(2000); break;
+                    delay(2000); running = false;
                 }
             } 
-            else if(ty > 200 && tx < 150) { clearTouchGhost(); break; } 
+            else if(ty > 200 && tx < 150) { running = false; } 
             else if(ty > 200 && tx > 160) {
                 apState = !apState;
                 if(apState) {
@@ -300,8 +323,9 @@ void runWifiManager() {
                 tft.setCursor(170, 210); tft.setTextColor(apState ? 0xFFFF : 0x0000);
                 tft.print(apState ? "HOTSPOT KAPAT" : "HOTSPOT AC");
                 tft.setTextColor(0xFFFF);
-                clearTouchGhost();
+                delay(300);
             }
+            delay(100);
         }
     }
     clearTouchGhost();
@@ -315,12 +339,20 @@ void runBtManager() {
     tft.fillRect(50, 150, 220, 50, 0x03FF); tft.setCursor(130, 170); tft.print("GERI");
     
     clearTouchGhost();
-    while(digitalRead(JOY_SELECT) == HIGH) {
+    bool running = true;
+    bool lastBtn = digitalRead(JOY_SELECT);
+
+    while(running) {
         esp_task_wdt_reset();
+        
+        bool currBtn = digitalRead(JOY_SELECT);
+        if(lastBtn == HIGH && currBtn == LOW) running = false;
+        lastBtn = currBtn;
+
         if (touch.touched()) {
             playClick(); TS_Point p = touch.getPoint(); int ty = getTY(p.y);
-            if(ty > 80 && ty < 130) { btState = !btState; if(btState) btStart(); else btStop(); playBeep(); clearTouchGhost(); break; }
-            if(ty > 150 && ty < 200) { clearTouchGhost(); break; }
+            if(ty > 80 && ty < 130) { btState = !btState; if(btState) btStart(); else btStop(); playBeep(); delay(300); running = false; }
+            if(ty > 150 && ty < 200) { running = false; }
         }
     }
     clearTouchGhost();
@@ -451,12 +483,20 @@ void runFileManager() {
     server.begin();
 
     clearTouchGhost();
-    while(digitalRead(JOY_SELECT) == HIGH) {
+    bool running = true;
+    bool lastBtn = digitalRead(JOY_SELECT);
+
+    while(running) {
         esp_task_wdt_reset();
         server.handleClient();
+        
+        bool currBtn = digitalRead(JOY_SELECT);
+        if(lastBtn == HIGH && currBtn == LOW) running = false;
+        lastBtn = currBtn;
+
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int ty = getTY(p.y);
-            if(ty > 190) { playClick(); clearTouchGhost(); break; }
+            if(ty > 190) { playClick(); running = false; }
         }
         delay(10);
     }
@@ -482,8 +522,15 @@ void runFilesApp() {
     std::vector<FInfo> items;
     
     clearTouchGhost();
-    while(digitalRead(JOY_SELECT) == HIGH) {
+    bool running = true;
+    bool lastBtn = digitalRead(JOY_SELECT);
+
+    while(running) {
         esp_task_wdt_reset();
+        
+        bool currBtn = digitalRead(JOY_SELECT);
+        if(lastBtn == HIGH && currBtn == LOW) running = false;
+        lastBtn = currBtn;
         
         if(redraw) {
             items.clear();
@@ -525,9 +572,9 @@ void runFilesApp() {
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
             
-            if(tx > 260 && ty > 215) { playClick(); clearTouchGhost(); break; } 
-            else if(tx > 260 && ty > 40 && ty < 120) { playClick(); if(scrollY > 0) scrollY--; redraw = true; clearTouchGhost(); } 
-            else if(tx > 260 && ty > 130 && ty < 210) { playClick(); if(scrollY < items.size()-1) scrollY++; redraw = true; clearTouchGhost(); } 
+            if(tx > 260 && ty > 215) { playClick(); running = false; } 
+            else if(tx > 260 && ty > 40 && ty < 120) { playClick(); if(scrollY > 0) scrollY--; redraw = true; delay(200); } 
+            else if(tx > 260 && ty > 130 && ty < 210) { playClick(); if(scrollY < items.size()-1) scrollY++; redraw = true; delay(200); } 
             else if(tx < 200 && ty > 40 && ty < 220) { 
                 int clickedIdx = scrollY + ((ty - 40) / 45);
                 if(clickedIdx < items.size()) {
@@ -629,7 +676,6 @@ void renderMusicPlayerUI() {
     tft.setCursor(110, 165); tft.setTextSize(2); tft.print(isPlaying ? "DURDUR" : "OYNAT"); tft.setTextSize(1);
     tft.fillRect(230, 150, 60, 40, 0x3186); tft.setCursor(240, 165); tft.print("ILERI >>");
 
-    // MUHAMMED: Boydan Boya Dinamik Dokunmatik Ses Barı
     tft.fillRect(10, 205, 60, 25, 0x0000); tft.setCursor(15, 213); tft.printf("SES: %%%d", globalVolume);
     tft.drawRect(80, 205, 230, 25, 0xFFFF); tft.fillRect(80, 205, (globalVolume*230)/100, 25, 0x07E0);
     
@@ -640,13 +686,20 @@ void runMusicPlayer() {
     loadMusicFiles();
     renderMusicPlayerUI();
     
+    clearTouchGhost();
+    bool running = true;
+    bool lastBtn = digitalRead(JOY_SELECT);
+
     if(musicFiles.size() == 0) {
-        clearTouchGhost();
-        while(digitalRead(JOY_SELECT) == HIGH) {
+        while(running) {
             esp_task_wdt_reset();
+            bool currBtn = digitalRead(JOY_SELECT);
+            if(lastBtn == HIGH && currBtn == LOW) running = false;
+            lastBtn = currBtn;
+
             if(touch.touched()) {
                 TS_Point p = touch.getPoint(); int ty = getTY(p.y);
-                if(ty > 190) { playClick(); clearTouchGhost(); break; }
+                if(ty > 190) { playClick(); running = false; }
             }
             delay(10);
         }
@@ -662,11 +715,13 @@ void runMusicPlayer() {
     
     if(isPlaying) mp3Audio->connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
 
-    bool forceExit = false;
-    clearTouchGhost();
-    while(digitalRead(JOY_SELECT) == HIGH && !forceExit) {
+    while(running) {
         esp_task_wdt_reset();
         
+        bool currBtn = digitalRead(JOY_SELECT);
+        if(lastBtn == HIGH && currBtn == LOW) running = false;
+        lastBtn = currBtn;
+
         if(isPlaying) {
             mp3Audio->loop(); 
             
@@ -685,7 +740,7 @@ void runMusicPlayer() {
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
             
-            if(tx > 260 && ty < 40) { mp3Audio->stopSong(); isPlaying = false; forceExit = true; playClick(); clearTouchGhost(); }
+            if(tx > 260 && ty < 40) { mp3Audio->stopSong(); isPlaying = false; playClick(); running = false; }
             
             else if(ty > 150 && ty < 195) {
                 if(tx <= 90) { 
@@ -721,7 +776,7 @@ void runMusicPlayer() {
                     tft.fillRect(80, 205, 230, 25, 0x0000); 
                     tft.fillRect(80, 205, (globalVolume*230)/100, 25, 0x07E0);
                     tft.drawRect(80, 205, 230, 25, 0xFFFF);
-                    clearTouchGhost();
+                    delay(50);
                 }
             }
         }
@@ -740,11 +795,22 @@ void runMusicPlayer() {
 void runCalculator() {
     String eq = ""; const char* cKeys[4][4] = { {"7","8","9","/"}, {"4","5","6","*"}, {"1","2","3","-"}, {"C","0","=","+"} };
     tft.fillScreen(0x0000); bool drawC = true; 
+    
+    tft.fillRect(270, 5, 40, 25, 0xF800); tft.setTextColor(0xFFFF); tft.setTextSize(1); tft.setCursor(275, 12); tft.print("CIK");
+    
     clearTouchGhost();
-    while(digitalRead(JOY_SELECT) == HIGH) {
+    bool running = true;
+    bool lastBtn = digitalRead(JOY_SELECT);
+
+    while(running) {
         esp_task_wdt_reset();
+        
+        bool currBtn = digitalRead(JOY_SELECT);
+        if(lastBtn == HIGH && currBtn == LOW) running = false;
+        lastBtn = currBtn;
+
         if(drawC) {
-            tft.fillRect(10, 10, 300, 50, 0xFFFF);
+            tft.fillRect(10, 10, 250, 50, 0xFFFF);
             tft.setTextColor(0x0000); tft.setTextSize(2); tft.setCursor(20, 25); tft.print(eq); tft.setTextSize(1);
             for(int r=0; r<4; r++) {
                 for(int c=0; c<4; c++) {
@@ -754,7 +820,9 @@ void runCalculator() {
         }
         if (touch.touched()) {
             playClick(); TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
-            if(ty > 70 && ty < 230) {
+            
+            if(tx > 260 && ty < 40) { running = false; }
+            else if(ty > 70 && ty < 230) {
                 int c = (tx - 10) / 75; int r = (ty - 70) / 40;
                 if(c>=0&&c<4 && r>=0&&r<4) {
                     String k = cKeys[r][c]; if(k == "C") eq = ""; else if(k == "=") eq = "Hesaplandi"; else eq += k;
@@ -776,10 +844,23 @@ void runCMD() {
     tft.println("\nEthernet bagdastiricisi Sovereign_WLAN:");
     tft.print("   IPv4 Adresi. . . . . : "); tft.println(WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "Bagli Degil");
     tft.println("\nC:\\KynexOS\\System32> _");
-    tft.setTextColor(0xF800); tft.setCursor(0, 230); tft.print("SELECT ILE CIKIS YAPIN");
+    tft.fillRect(270, 5, 40, 25, 0xF800); tft.setTextColor(0xFFFF); tft.setCursor(275, 12); tft.print("CIK");
     
     clearTouchGhost();
-    while(digitalRead(JOY_SELECT) == HIGH) { esp_task_wdt_reset(); delay(50); }
+    bool running = true;
+    bool lastBtn = digitalRead(JOY_SELECT);
+    while(running) { 
+        esp_task_wdt_reset(); 
+        bool currBtn = digitalRead(JOY_SELECT);
+        if(lastBtn == HIGH && currBtn == LOW) running = false;
+        lastBtn = currBtn;
+
+        if(touch.touched()) {
+            TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
+            if(tx > 260 && ty < 40) running = false;
+        }
+        delay(50); 
+    }
     clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
@@ -791,10 +872,23 @@ void runSysInfo() {
     tft.setCursor(10, 80); tft.printf("RAM: %d KB", ESP.getFreeHeap()/1024);
     tft.setCursor(10, 110); tft.printf("PSRAM: %d KB", ESP.getFreePsram()/1024);
     tft.setCursor(10, 140); tft.print("WIFI IP: " + (WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "OFFLINE"));
-    tft.setTextColor(0xF800); tft.setCursor(10, 210); tft.print("SELECT TUSU CIKIS");
+    tft.fillRect(270, 5, 40, 25, 0xF800); tft.setTextColor(0xFFFF); tft.setCursor(275, 12); tft.print("CIK");
     
     clearTouchGhost();
-    while(digitalRead(JOY_SELECT) == HIGH) { esp_task_wdt_reset(); delay(100); }
+    bool running = true;
+    bool lastBtn = digitalRead(JOY_SELECT);
+    while(running) { 
+        esp_task_wdt_reset(); 
+        bool currBtn = digitalRead(JOY_SELECT);
+        if(lastBtn == HIGH && currBtn == LOW) running = false;
+        lastBtn = currBtn;
+
+        if(touch.touched()) {
+            TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
+            if(tx > 260 && ty < 40) running = false;
+        }
+        delay(50); 
+    }
     clearTouchGhost();
     currentState = DESKTOP; renderDesktop();
 }
@@ -815,14 +909,25 @@ void runXOX() {
     tft.drawLine(190, 30, 190, 210, 0xFFFF); 
     tft.drawLine(70, 90, 250, 90, 0xFFFF);   
     tft.drawLine(70, 150, 250, 150, 0xFFFF); 
+    tft.fillRect(270, 5, 40, 25, 0xF800); tft.setTextColor(0xFFFF); tft.setCursor(275, 12); tft.print("CIK");
     
     clearTouchGhost();
-    while(digitalRead(JOY_SELECT) == HIGH) {
+    bool running = true;
+    bool lastBtn = digitalRead(JOY_SELECT);
+
+    while(running) {
         esp_task_wdt_reset();
-        if (touch.touched() && winner == 0) {
+        
+        bool currBtn = digitalRead(JOY_SELECT);
+        if(lastBtn == HIGH && currBtn == LOW) running = false;
+        lastBtn = currBtn;
+
+        if (touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
             
-            if (tx > 70 && tx < 250 && ty > 30 && ty < 210) {
+            if(tx > 260 && ty < 40) { running = false; clearTouchGhost(); continue; }
+
+            if (winner == 0 && tx > 70 && tx < 250 && ty > 30 && ty < 210) {
                 int col = (tx - 70) / 60;
                 int row = (ty - 30) / 60;
                 int idx = row * 3 + col;
@@ -857,7 +962,7 @@ void runXOX() {
                     for(int i=0; i<8; i++) {
                         if(board[wins[i][0]] != 0 && board[wins[i][0]] == board[wins[i][1]] && board[wins[i][1]] == board[wins[i][2]]) {
                             winner = board[wins[i][0]];
-                            tft.setCursor(90, 10); tft.fillRect(90, 0, 230, 25, 0x0000);
+                            tft.setCursor(90, 10); tft.fillRect(90, 0, 170, 25, 0x0000);
                             if(winner == 1) { tft.setTextColor(0x07E0); tft.print("X KAZANDI!"); }
                             else { tft.setTextColor(0xF800); tft.print("PALYACO KAZANDI!"); }
                             playToneI2S(winner == 1 ? 1200 : 600, 400); 
@@ -870,7 +975,7 @@ void runXOX() {
                         for(int i=0; i<9; i++) if(board[i] == 0) full = false;
                         if(full) {
                             winner = 3;
-                            tft.setCursor(120, 10); tft.fillRect(90, 0, 230, 25, 0x0000);
+                            tft.setCursor(120, 10); tft.fillRect(90, 0, 170, 25, 0x0000);
                             tft.setTextColor(0xFFFF); tft.print("BERABERE!");
                             playToneI2S(400, 300);
                         }
@@ -889,12 +994,21 @@ void runPianoApp() {
     for(int i=0; i<8; i++) tft.fillRect(i*40, 40, 38, 200, 0xFFFF); 
     int bKeys[] = {1, 2, 4, 5, 6}; 
     for(int i=0; i<5; i++) tft.fillRect(bKeys[i]*40 - 10, 40, 20, 120, 0x0000);
+    tft.fillRect(270, 5, 40, 25, 0xF800); tft.setTextColor(0xFFFF); tft.setTextSize(1); tft.setCursor(275, 12); tft.print("CIK");
     
     clearTouchGhost();
-    while(digitalRead(JOY_SELECT) == HIGH) {
+    bool running = true;
+    bool lastBtn = digitalRead(JOY_SELECT);
+
+    while(running) {
         esp_task_wdt_reset();
+        bool currBtn = digitalRead(JOY_SELECT);
+        if(lastBtn == HIGH && currBtn == LOW) running = false;
+        lastBtn = currBtn;
+
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
+            if(tx > 260 && ty < 40) { running = false; clearTouchGhost(); continue; }
             if(ty > 40) {
                 int key = tx / 40;
                 float freqs[] = {261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25}; 
@@ -912,13 +1026,28 @@ void runPianoApp() {
 
 void run3DCube() {
     tft.fillScreen(0x0000); float ax=0, ay=0; 
+    tft.fillRect(270, 5, 40, 25, 0xF800); tft.setTextColor(0xFFFF); tft.setTextSize(1); tft.setCursor(275, 12); tft.print("CIK");
+    
     clearTouchGhost();
-    while(digitalRead(JOY_SELECT) == HIGH) {
+    bool running = true;
+    bool lastBtn = digitalRead(JOY_SELECT);
+
+    while(running) {
         esp_task_wdt_reset(); ax += 0.05; ay += 0.03; 
+        bool currBtn = digitalRead(JOY_SELECT);
+        if(lastBtn == HIGH && currBtn == LOW) running = false;
+        lastBtn = currBtn;
+
         tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(10,10); tft.print("3D AUTO CUBE - SELECT CIKIS");
+        tft.fillRect(270, 5, 40, 25, 0xF800); tft.setCursor(275, 12); tft.print("CIK");
         tft.drawRect(110+sin(ax)*20, 70+cos(ay)*20, 100, 100, 0x5DFF); tft.drawRect(130+sin(ax)*20, 90+cos(ay)*20, 100, 100, 0xFFFF);
         tft.drawLine(110+sin(ax)*20, 70+cos(ay)*20, 130+sin(ax)*20, 90+cos(ay)*20, 0x07E0); tft.drawLine(210+sin(ax)*20, 70+cos(ay)*20, 230+sin(ax)*20, 90+cos(ay)*20, 0x07E0);
         tft.drawLine(110+sin(ax)*20, 170+cos(ay)*20, 130+sin(ax)*20, 190+cos(ay)*20, 0x07E0); tft.drawLine(210+sin(ax)*20, 170+cos(ay)*20, 230+sin(ax)*20, 190+cos(ay)*20, 0x07E0);
+        
+        if(touch.touched()) {
+            TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
+            if(tx > 260 && ty < 40) running = false;
+        }
         delay(30);
     }
     clearTouchGhost();
@@ -929,10 +1058,24 @@ void runSnake() {
     int x[50], y[50], len=5, dx=8, dy=0, ax=160, ay=120, score=0;
     for(int i=0;i<50;i++){x[i]=-10;y[i]=-10;} x[0]=160; y[0]=120;
     tft.fillScreen(0x0000); tft.fillCircle(ax+4, ay+4, 4, 0xF800); 
+    tft.fillRect(270, 5, 40, 25, 0xF800); tft.setTextColor(0xFFFF); tft.setTextSize(1); tft.setCursor(275, 12); tft.print("CIK");
+    
     clearTouchGhost();
-    while(digitalRead(JOY_SELECT) == HIGH) {
+    bool running = true;
+    bool lastBtn = digitalRead(JOY_SELECT);
+
+    while(running) {
         esp_task_wdt_reset();
         
+        bool currBtn = digitalRead(JOY_SELECT);
+        if(lastBtn == HIGH && currBtn == LOW) running = false;
+        lastBtn = currBtn;
+
+        if(touch.touched()) {
+            TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
+            if(tx > 260 && ty < 40) { running = false; continue; }
+        }
+
         int raw_j1x = analogRead(J1_X); int raw_j1y = analogRead(J1_Y);
         int jx = 4095 - raw_j1y; 
         int jy = raw_j1x;
@@ -949,9 +1092,13 @@ void runSnake() {
             tft.fillCircle(ax+4, ay+4, 4, 0xF800); playToneI2S(1200, 50); 
         }
         tft.fillRect(x[0], y[0], 8, 8, 0x07E0); 
+        
+        // MUHAMMED: Kırmızı CIK butonunun üstüne yılan gelirse silinmemesi için yeniden çizilir.
+        tft.fillRect(270, 5, 40, 25, 0xF800); tft.setCursor(275, 12); tft.setTextColor(0xFFFF); tft.print("CIK");
+
         if(x[0]<0 || x[0]>=320 || y[0]<0 || y[0]>=240) {
             playToneI2S(200, 500); tft.fillScreen(0xF800); tft.setCursor(100, 120); tft.setTextColor(0xFFFF); tft.printf("OYUN BITTI! SKOR: %d", score);
-            delay(2000); break;
+            delay(2000); running = false;
         } delay(60); 
     }
     clearTouchGhost();
@@ -960,10 +1107,23 @@ void runSnake() {
 
 void runPong() {
     int p1y=100, p2y=100, bx=160, by=120, bdx=3, bdy=3, s1=0, s2=0; tft.fillScreen(0); 
+    
     clearTouchGhost();
-    while(digitalRead(JOY_SELECT) == HIGH) {
+    bool running = true;
+    bool lastBtn = digitalRead(JOY_SELECT);
+
+    while(running) {
         esp_task_wdt_reset();
         
+        bool currBtn = digitalRead(JOY_SELECT);
+        if(lastBtn == HIGH && currBtn == LOW) running = false;
+        lastBtn = currBtn;
+
+        if(touch.touched()) {
+            TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
+            if(tx > 260 && ty < 40) { running = false; continue; }
+        }
+
         int raw_j1x = analogRead(J1_X); 
         int j1y = raw_j1x; 
         p1y = map(j1y, 0, 4095, 0, 205); 
@@ -974,6 +1134,8 @@ void runPong() {
         
         tft.fillScreen(0); tft.setCursor(130, 10); tft.setTextColor(0x03FF); tft.printf("%d - %d", s1, s2);
         tft.fillRect(10, p1y, 8, 35, 0xF800); tft.fillRect(302, p2y, 8, 35, 0x07E0); tft.fillCircle(bx, by, 3, 0xFFFF);
+        tft.fillRect(280, 0, 40, 25, 0xF800); tft.setTextColor(0xFFFF); tft.setCursor(290, 8); tft.print("X");
+        
         bx+=bdx; by+=bdy;
         if(by<=0 || by>=240) { bdy=-bdy; playToneI2S(600, 30); } 
         if(bx<=20 && by>p1y && by<p1y+35) { bdx=-bdx; playToneI2S(800, 30); } 
@@ -990,14 +1152,22 @@ void runPaintApp() {
     tft.fillScreen(0xFFFF); tft.fillRect(280, 0, 40, 240, 0xC618);
     tft.fillRect(285, 10, 30, 30, 0xF800); tft.fillRect(285, 50, 30, 30, 0x07E0); tft.fillRect(285, 90, 30, 30, 0x001F); tft.fillRect(285, 130, 30, 30, 0xFFE0);
     tft.fillRect(285, 170, 30, 30, 0x0000); tft.fillRect(285, 210, 30, 25, 0xF81F); 
+    
     clearTouchGhost();
-    while(digitalRead(JOY_SELECT) == HIGH) {
+    bool running = true;
+    bool lastBtn = digitalRead(JOY_SELECT);
+
+    while(running) {
         esp_task_wdt_reset();
+        bool currBtn = digitalRead(JOY_SELECT);
+        if(lastBtn == HIGH && currBtn == LOW) running = false;
+        lastBtn = currBtn;
+
         if (touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
             if (tx > 280) {
                 playClick();
-                if (ty > 210) { clearTouchGhost(); break; }
+                if (ty > 210) { running = false; clearTouchGhost(); continue; }
                 else if (ty > 10 && ty < 40) paintColor = 0xF800; else if (ty > 50 && ty < 80) paintColor = 0x07E0;
                 else if (ty > 90 && ty < 120) paintColor = 0x001F; else if (ty > 130 && ty < 160) paintColor = 0xFFE0;
                 else if (ty > 170 && ty < 200) paintColor = 0xFFFF; delay(100);
@@ -1010,12 +1180,26 @@ void runPaintApp() {
 
 void runJoyTest() {
     tft.fillScreen(0x0000); 
+    tft.fillRect(270, 5, 40, 25, 0xF800); tft.setTextColor(0xFFFF); tft.setTextSize(1); tft.setCursor(275, 12); tft.print("CIK");
+    
     clearTouchGhost();
-    while(digitalRead(JOY_SELECT) == HIGH) {
+    bool running = true;
+    bool lastBtn = digitalRead(JOY_SELECT);
+
+    while(running) {
         esp_task_wdt_reset();
         
+        bool currBtn = digitalRead(JOY_SELECT);
+        if(lastBtn == HIGH && currBtn == LOW) running = false;
+        lastBtn = currBtn;
+
+        if(touch.touched()) {
+            TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
+            if(tx > 260 && ty < 40) { running = false; continue; }
+        }
+
         int raw_j1x = analogRead(J1_X); int raw_j1y = analogRead(J1_Y);
-        int j1x = 4095 - raw_j1y; 
+        int jx = 4095 - raw_j1y; 
         int j1y = raw_j1x;
         
         int raw_j2x = analogRead(J2_X); int raw_j2y = analogRead(J2_Y);
@@ -1172,7 +1356,7 @@ void loop() {
         }
         else if (currentState == TEST_MENU) {
             playClick(); clearTouchGhost();
-            if (ty > 150 && ty < 175) { tft.fillScreen(0xFFFF); tft.setTextColor(0); tft.setCursor(10,10); tft.print("DOKUNMA TEST - SELECT:CIKIS"); clearTouchGhost(); while(digitalRead(JOY_SELECT)==HIGH) { if(touch.touched()){ TS_Point tp = touch.getPoint(); tft.drawCircle(getTX(tp.x), getTY(tp.y), 10, 0x07FF); } esp_task_wdt_reset(); } clearTouchGhost(); currentState = DESKTOP; renderDesktop(); }
+            if (ty > 150 && ty < 175) { tft.fillScreen(0xFFFF); tft.setTextColor(0); tft.setCursor(10,10); tft.print("DOKUNMA TEST - SELECT:CIKIS"); tft.fillRect(270, 5, 40, 25, 0xF800); tft.setTextColor(0xFFFF); tft.setTextSize(1); tft.setCursor(275, 12); tft.print("CIK"); clearTouchGhost(); bool trun=true; while(trun){ if(touch.touched()){ TS_Point tp=touch.getPoint(); int ktx=getTX(tp.x); int kty=getTY(tp.y); if(ktx>260 && kty<40) trun=false; else tft.drawCircle(ktx, kty, 10, 0x07FF); } esp_task_wdt_reset(); } clearTouchGhost(); currentState = DESKTOP; renderDesktop(); }
             else if (ty > 175 && ty < 195) { runJoyTest(); }
             else if (ty > 195 && ty < 225) { 
                 tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(50, 120); tft.print("I2S SINUS SES TESTI...");
