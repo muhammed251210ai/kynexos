@@ -1,5 +1,5 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.133 - THE TITANIUM CORE
+ * KynexOs Sovereign Build v230.133 - THE TITANIUM CORE (TYPO FIXED)
  * Geliştirici: Muhammed (Kynex)
  * Özellikler: Absolute Silence Ghost Shield (300ms), Edge Detection, Touch Exits
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
@@ -676,6 +676,7 @@ void renderMusicPlayerUI() {
     tft.setCursor(110, 165); tft.setTextSize(2); tft.print(isPlaying ? "DURDUR" : "OYNAT"); tft.setTextSize(1);
     tft.fillRect(230, 150, 60, 40, 0x3186); tft.setCursor(240, 165); tft.print("ILERI >>");
 
+    // MUHAMMED: Boydan Boya Dinamik Dokunmatik Ses Barı
     tft.fillRect(10, 205, 60, 25, 0x0000); tft.setCursor(15, 213); tft.printf("SES: %%%d", globalVolume);
     tft.drawRect(80, 205, 230, 25, 0xFFFF); tft.fillRect(80, 205, (globalVolume*230)/100, 25, 0x07E0);
     
@@ -1093,7 +1094,6 @@ void runSnake() {
         }
         tft.fillRect(x[0], y[0], 8, 8, 0x07E0); 
         
-        // MUHAMMED: Kırmızı CIK butonunun üstüne yılan gelirse silinmemesi için yeniden çizilir.
         tft.fillRect(270, 5, 40, 25, 0xF800); tft.setCursor(275, 12); tft.setTextColor(0xFFFF); tft.print("CIK");
 
         if(x[0]<0 || x[0]>=320 || y[0]<0 || y[0]>=240) {
@@ -1199,7 +1199,7 @@ void runJoyTest() {
         }
 
         int raw_j1x = analogRead(J1_X); int raw_j1y = analogRead(J1_Y);
-        int jx = 4095 - raw_j1y; 
+        int j1x = 4095 - raw_j1y; 
         int j1y = raw_j1x;
         
         int raw_j2x = analogRead(J2_X); int raw_j2y = analogRead(J2_Y);
