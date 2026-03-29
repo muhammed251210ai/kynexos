@@ -2,7 +2,7 @@
 # * Kynex Sovereign - KynexOs Discrete CI v230.47
 # * Geliştirici: Muhammed (Kynex)
 # * Görev: Separate Bootloader, Partition, Firmware and Music Artifacts
-# * Değişiklik: FAT16 zorlamasi kaldirildi, ESP32 uyumlu Auto-FAT (FAT12) yapildi!
+# * Değişiklik: Linux mtools yerine ESP32 donanimina ozel PlatformIO FATFS kullanildi!
 # **************************************************************************
 
 name: KynexOs Sovereign Build v230.0
@@ -49,17 +49,14 @@ jobs:
       - name: KynexOs Derle
         run: pio run
 
-      - name: Music.bin Olustur (FFAT)
+      - name: ESP32 Uyumlu Fatfs.bin Olustur (PlatformIO BuildFS)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y mtools dosfstools
-          mkdir -p music
-          # Partitions.csv icindeki 0x7A0000 boyutuna (7808 KB) tam esit bos disk imaji olustur
-          dd if=/dev/zero of=music.bin bs=1024 count=7808
-          # MUHAMMED: "-F 16" silindi! Sistem 7.6MB'a uygun olan FAT12'yi kendi sececek.
-          mkfs.fat music.bin
-          mmd -i music.bin ::/music
-          mcopy -i music.bin music/* ::/music/ || true
+          # PlatformIO'nun disk uretebilmesi icin "data" klasoru gerekir.
+          mkdir -p data/music
+          # Github deposundaki music klasorunu PlatformIO'nun data klasorune tasi
+          cp -r music/* data/music/ || true
+          # PlatformIO ile ESP32 sektorune (4096) %100 uyumlu imaji uret!
+          pio run -t buildfs
 
       - name: Sovereign Discrete Pack Yukle
         uses: actions/upload-artifact@v4
@@ -69,5 +66,5 @@ jobs:
             .pio/build/esp32-s3-devkitc-1/bootloader.bin
             .pio/build/esp32-s3-devkitc-1/partitions.bin
             .pio/build/esp32-s3-devkitc-1/firmware.bin
-            music.bin
+            .pio/build/esp32-s3-devkitc-1/fatfs.bin
           compression-level: 9
