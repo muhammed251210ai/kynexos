@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.133 - THE TITANIUM CORE (TYPO FIXED)
+ * KynexOs Sovereign Build v230.134 - THE TITANIUM ARMOR
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: Absolute Silence Ghost Shield (300ms), Edge Detection, Touch Exits
+ * Özellikler: I2S Amp Spike Filter (No Ghost Exits), 500ms Button Debounce
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -144,26 +144,36 @@ void playBootSound() {
     playToneI2S(1046.50, 300); 
 }
 
-// MUHAMMED: TİTANYUM KALKAN (MUTLAK SESSİZLİK)
-// Sistem en az 300ms boyunca ekranda HİÇBİR dokunuş görmeden dönmez!
+// MUHAMMED: KİLİTLENMEZ GHOST KALKANI
+// 300ms sessizlik bekler, ancak donanım arızası varsa 2 saniyede sistemi zorla kurtarır.
 void clearTouchGhost() {
     unsigned long silenceStart = millis();
+    unsigned long absoluteStart = millis();
     while(millis() - silenceStart < 300) {
+        esp_task_wdt_reset();
         if(touch.touched()) {
             touch.getPoint(); // Veriyi yut
-            silenceStart = millis(); // Süreyi sıfırla! (Sessizlik baştan başlar)
+            silenceStart = millis(); // Sessizliği baştan başlat
         }
+        if(millis() - absoluteStart > 2000) break; // Zırh delinirse sistemi sonsuz döngüden kurtar
         delay(10);
     }
 }
 
-// Dokunmatik Kalibrasyonu 
+// MUHAMMED: I2S AMFİSİ ELEKTRİKSEL PARAZİT FİLTRESİ
+// Eğer ADC değerleri 100'ün altı veya 4050'nin üstündeyse bu parazittir! 999 döndürerek ÇIKIŞ butonundan uzaklaştırır.
 int getTX(int rawX) { 
+    if(rawX < 100 || rawX > 4050) return 999; 
     int tx = map(rawX, 3900, 150, 0, 320) + 15; 
     if(tx < 0) tx = 0; if(tx > 320) tx = 320;
     return tx;
 } 
-int getTY(int rawY) { return map(rawY, 3800, 200, 0, 240); }
+int getTY(int rawY) { 
+    if(rawY < 100 || rawY > 4050) return 999; 
+    int ty = map(rawY, 3800, 200, 0, 240); 
+    if(ty < 0) ty = 0; if(ty > 240) ty = 240;
+    return ty;
+}
 
 // ZAMAN VE MASAÜSTÜ YÖNETİMİ
 void drawClock() {
@@ -218,16 +228,18 @@ String runKeyboard(String prompt) {
 
     tft.fillScreen(0x0000); bool drawKeys = true;
     clearTouchGhost();
-    
     bool running = true;
-    bool lastBtn = digitalRead(JOY_SELECT);
+    unsigned long btnLowTime = 0;
     
     while(running) {
         esp_task_wdt_reset();
         
-        bool currBtn = digitalRead(JOY_SELECT);
-        if(lastBtn == HIGH && currBtn == LOW) running = false;
-        lastBtn = currBtn;
+        if(digitalRead(JOY_SELECT) == LOW) {
+            if(btnLowTime == 0) btnLowTime = millis();
+            else if(millis() - btnLowTime > 500) { playBeep(); clearTouchGhost(); return input; }
+        } else {
+            btnLowTime = 0;
+        }
 
         if(drawKeys) {
             tft.fillRect(0, 0, 320, 80, 0x10A2);
@@ -283,14 +295,17 @@ void runWifiManager() {
 
     clearTouchGhost();
     bool running = true;
-    bool lastBtn = digitalRead(JOY_SELECT);
+    unsigned long btnLowTime = 0;
 
     while(running) {
         esp_task_wdt_reset();
         
-        bool currBtn = digitalRead(JOY_SELECT);
-        if(lastBtn == HIGH && currBtn == LOW) running = false;
-        lastBtn = currBtn;
+        if(digitalRead(JOY_SELECT) == LOW) {
+            if(btnLowTime == 0) btnLowTime = millis();
+            else if(millis() - btnLowTime > 500) { playClick(); running = false; }
+        } else {
+            btnLowTime = 0;
+        }
 
         if (touch.touched()) {
             playClick(); TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
@@ -340,14 +355,17 @@ void runBtManager() {
     
     clearTouchGhost();
     bool running = true;
-    bool lastBtn = digitalRead(JOY_SELECT);
+    unsigned long btnLowTime = 0;
 
     while(running) {
         esp_task_wdt_reset();
         
-        bool currBtn = digitalRead(JOY_SELECT);
-        if(lastBtn == HIGH && currBtn == LOW) running = false;
-        lastBtn = currBtn;
+        if(digitalRead(JOY_SELECT) == LOW) {
+            if(btnLowTime == 0) btnLowTime = millis();
+            else if(millis() - btnLowTime > 500) { playClick(); running = false; }
+        } else {
+            btnLowTime = 0;
+        }
 
         if (touch.touched()) {
             playClick(); TS_Point p = touch.getPoint(); int ty = getTY(p.y);
@@ -484,15 +502,18 @@ void runFileManager() {
 
     clearTouchGhost();
     bool running = true;
-    bool lastBtn = digitalRead(JOY_SELECT);
+    unsigned long btnLowTime = 0;
 
     while(running) {
         esp_task_wdt_reset();
         server.handleClient();
         
-        bool currBtn = digitalRead(JOY_SELECT);
-        if(lastBtn == HIGH && currBtn == LOW) running = false;
-        lastBtn = currBtn;
+        if(digitalRead(JOY_SELECT) == LOW) {
+            if(btnLowTime == 0) btnLowTime = millis();
+            else if(millis() - btnLowTime > 500) { playClick(); running = false; }
+        } else {
+            btnLowTime = 0;
+        }
 
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int ty = getTY(p.y);
@@ -523,14 +544,17 @@ void runFilesApp() {
     
     clearTouchGhost();
     bool running = true;
-    bool lastBtn = digitalRead(JOY_SELECT);
+    unsigned long btnLowTime = 0;
 
     while(running) {
         esp_task_wdt_reset();
         
-        bool currBtn = digitalRead(JOY_SELECT);
-        if(lastBtn == HIGH && currBtn == LOW) running = false;
-        lastBtn = currBtn;
+        if(digitalRead(JOY_SELECT) == LOW) {
+            if(btnLowTime == 0) btnLowTime = millis();
+            else if(millis() - btnLowTime > 500) { playClick(); running = false; }
+        } else {
+            btnLowTime = 0;
+        }
         
         if(redraw) {
             items.clear();
@@ -689,14 +713,15 @@ void runMusicPlayer() {
     
     clearTouchGhost();
     bool running = true;
-    bool lastBtn = digitalRead(JOY_SELECT);
+    unsigned long btnLowTime = 0;
 
     if(musicFiles.size() == 0) {
         while(running) {
             esp_task_wdt_reset();
-            bool currBtn = digitalRead(JOY_SELECT);
-            if(lastBtn == HIGH && currBtn == LOW) running = false;
-            lastBtn = currBtn;
+            if(digitalRead(JOY_SELECT) == LOW) {
+                if(btnLowTime == 0) btnLowTime = millis();
+                else if(millis() - btnLowTime > 500) running = false;
+            } else { btnLowTime = 0; }
 
             if(touch.touched()) {
                 TS_Point p = touch.getPoint(); int ty = getTY(p.y);
@@ -719,9 +744,12 @@ void runMusicPlayer() {
     while(running) {
         esp_task_wdt_reset();
         
-        bool currBtn = digitalRead(JOY_SELECT);
-        if(lastBtn == HIGH && currBtn == LOW) running = false;
-        lastBtn = currBtn;
+        if(digitalRead(JOY_SELECT) == LOW) {
+            if(btnLowTime == 0) btnLowTime = millis();
+            else if(millis() - btnLowTime > 500) { playClick(); running = false; }
+        } else {
+            btnLowTime = 0;
+        }
 
         if(isPlaying) {
             mp3Audio->loop(); 
@@ -741,7 +769,7 @@ void runMusicPlayer() {
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
             
-            if(tx > 260 && ty < 40) { mp3Audio->stopSong(); isPlaying = false; playClick(); running = false; }
+            if(tx > 260 && ty < 40) { playClick(); running = false; clearTouchGhost(); }
             
             else if(ty > 150 && ty < 195) {
                 if(tx <= 90) { 
@@ -801,14 +829,17 @@ void runCalculator() {
     
     clearTouchGhost();
     bool running = true;
-    bool lastBtn = digitalRead(JOY_SELECT);
+    unsigned long btnLowTime = 0;
 
     while(running) {
         esp_task_wdt_reset();
         
-        bool currBtn = digitalRead(JOY_SELECT);
-        if(lastBtn == HIGH && currBtn == LOW) running = false;
-        lastBtn = currBtn;
+        if(digitalRead(JOY_SELECT) == LOW) {
+            if(btnLowTime == 0) btnLowTime = millis();
+            else if(millis() - btnLowTime > 500) { playClick(); running = false; }
+        } else {
+            btnLowTime = 0;
+        }
 
         if(drawC) {
             tft.fillRect(10, 10, 250, 50, 0xFFFF);
@@ -849,12 +880,16 @@ void runCMD() {
     
     clearTouchGhost();
     bool running = true;
-    bool lastBtn = digitalRead(JOY_SELECT);
+    unsigned long btnLowTime = 0;
     while(running) { 
         esp_task_wdt_reset(); 
-        bool currBtn = digitalRead(JOY_SELECT);
-        if(lastBtn == HIGH && currBtn == LOW) running = false;
-        lastBtn = currBtn;
+        
+        if(digitalRead(JOY_SELECT) == LOW) {
+            if(btnLowTime == 0) btnLowTime = millis();
+            else if(millis() - btnLowTime > 500) { playClick(); running = false; }
+        } else {
+            btnLowTime = 0;
+        }
 
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
@@ -877,12 +912,16 @@ void runSysInfo() {
     
     clearTouchGhost();
     bool running = true;
-    bool lastBtn = digitalRead(JOY_SELECT);
+    unsigned long btnLowTime = 0;
     while(running) { 
         esp_task_wdt_reset(); 
-        bool currBtn = digitalRead(JOY_SELECT);
-        if(lastBtn == HIGH && currBtn == LOW) running = false;
-        lastBtn = currBtn;
+        
+        if(digitalRead(JOY_SELECT) == LOW) {
+            if(btnLowTime == 0) btnLowTime = millis();
+            else if(millis() - btnLowTime > 500) { playClick(); running = false; }
+        } else {
+            btnLowTime = 0;
+        }
 
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
@@ -903,7 +942,7 @@ void runXOX() {
     
     tft.fillScreen(0x0000);
     tft.setTextColor(0xFFFF); tft.setTextSize(1);
-    tft.setCursor(10, 10); tft.print("XOX - SELECT CIKIS");
+    tft.setCursor(10, 10); tft.print("XOX - CIK");
     
     tft.drawRect(70, 30, 180, 180, 0xFFFF);
     tft.drawLine(130, 30, 130, 210, 0xFFFF); 
@@ -914,16 +953,19 @@ void runXOX() {
     
     clearTouchGhost();
     bool running = true;
-    bool lastBtn = digitalRead(JOY_SELECT);
+    unsigned long btnLowTime = 0;
 
     while(running) {
         esp_task_wdt_reset();
         
-        bool currBtn = digitalRead(JOY_SELECT);
-        if(lastBtn == HIGH && currBtn == LOW) running = false;
-        lastBtn = currBtn;
+        if(digitalRead(JOY_SELECT) == LOW) {
+            if(btnLowTime == 0) btnLowTime = millis();
+            else if(millis() - btnLowTime > 500) { playClick(); running = false; }
+        } else {
+            btnLowTime = 0;
+        }
 
-        if (touch.touched()) {
+        if (touch.touched() && winner == 0) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
             
             if(tx > 260 && ty < 40) { running = false; clearTouchGhost(); continue; }
@@ -999,13 +1041,17 @@ void runPianoApp() {
     
     clearTouchGhost();
     bool running = true;
-    bool lastBtn = digitalRead(JOY_SELECT);
+    unsigned long btnLowTime = 0;
 
     while(running) {
         esp_task_wdt_reset();
-        bool currBtn = digitalRead(JOY_SELECT);
-        if(lastBtn == HIGH && currBtn == LOW) running = false;
-        lastBtn = currBtn;
+        
+        if(digitalRead(JOY_SELECT) == LOW) {
+            if(btnLowTime == 0) btnLowTime = millis();
+            else if(millis() - btnLowTime > 500) { playClick(); running = false; }
+        } else {
+            btnLowTime = 0;
+        }
 
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
@@ -1031,15 +1077,19 @@ void run3DCube() {
     
     clearTouchGhost();
     bool running = true;
-    bool lastBtn = digitalRead(JOY_SELECT);
+    unsigned long btnLowTime = 0;
 
     while(running) {
         esp_task_wdt_reset(); ax += 0.05; ay += 0.03; 
-        bool currBtn = digitalRead(JOY_SELECT);
-        if(lastBtn == HIGH && currBtn == LOW) running = false;
-        lastBtn = currBtn;
+        
+        if(digitalRead(JOY_SELECT) == LOW) {
+            if(btnLowTime == 0) btnLowTime = millis();
+            else if(millis() - btnLowTime > 500) { playClick(); running = false; }
+        } else {
+            btnLowTime = 0;
+        }
 
-        tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(10,10); tft.print("3D AUTO CUBE - SELECT CIKIS");
+        tft.fillScreen(0x0000); tft.setTextColor(0xFFFF); tft.setCursor(10,10); tft.print("3D AUTO CUBE - CIK");
         tft.fillRect(270, 5, 40, 25, 0xF800); tft.setCursor(275, 12); tft.print("CIK");
         tft.drawRect(110+sin(ax)*20, 70+cos(ay)*20, 100, 100, 0x5DFF); tft.drawRect(130+sin(ax)*20, 90+cos(ay)*20, 100, 100, 0xFFFF);
         tft.drawLine(110+sin(ax)*20, 70+cos(ay)*20, 130+sin(ax)*20, 90+cos(ay)*20, 0x07E0); tft.drawLine(210+sin(ax)*20, 70+cos(ay)*20, 230+sin(ax)*20, 90+cos(ay)*20, 0x07E0);
@@ -1063,14 +1113,17 @@ void runSnake() {
     
     clearTouchGhost();
     bool running = true;
-    bool lastBtn = digitalRead(JOY_SELECT);
+    unsigned long btnLowTime = 0;
 
     while(running) {
         esp_task_wdt_reset();
         
-        bool currBtn = digitalRead(JOY_SELECT);
-        if(lastBtn == HIGH && currBtn == LOW) running = false;
-        lastBtn = currBtn;
+        if(digitalRead(JOY_SELECT) == LOW) {
+            if(btnLowTime == 0) btnLowTime = millis();
+            else if(millis() - btnLowTime > 500) { playClick(); running = false; }
+        } else {
+            btnLowTime = 0;
+        }
 
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
@@ -1110,14 +1163,17 @@ void runPong() {
     
     clearTouchGhost();
     bool running = true;
-    bool lastBtn = digitalRead(JOY_SELECT);
+    unsigned long btnLowTime = 0;
 
     while(running) {
         esp_task_wdt_reset();
         
-        bool currBtn = digitalRead(JOY_SELECT);
-        if(lastBtn == HIGH && currBtn == LOW) running = false;
-        lastBtn = currBtn;
+        if(digitalRead(JOY_SELECT) == LOW) {
+            if(btnLowTime == 0) btnLowTime = millis();
+            else if(millis() - btnLowTime > 500) { playClick(); running = false; }
+        } else {
+            btnLowTime = 0;
+        }
 
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
@@ -1155,13 +1211,17 @@ void runPaintApp() {
     
     clearTouchGhost();
     bool running = true;
-    bool lastBtn = digitalRead(JOY_SELECT);
+    unsigned long btnLowTime = 0;
 
     while(running) {
         esp_task_wdt_reset();
-        bool currBtn = digitalRead(JOY_SELECT);
-        if(lastBtn == HIGH && currBtn == LOW) running = false;
-        lastBtn = currBtn;
+        
+        if(digitalRead(JOY_SELECT) == LOW) {
+            if(btnLowTime == 0) btnLowTime = millis();
+            else if(millis() - btnLowTime > 500) { playClick(); running = false; }
+        } else {
+            btnLowTime = 0;
+        }
 
         if (touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
@@ -1184,14 +1244,17 @@ void runJoyTest() {
     
     clearTouchGhost();
     bool running = true;
-    bool lastBtn = digitalRead(JOY_SELECT);
+    unsigned long btnLowTime = 0;
 
     while(running) {
         esp_task_wdt_reset();
         
-        bool currBtn = digitalRead(JOY_SELECT);
-        if(lastBtn == HIGH && currBtn == LOW) running = false;
-        lastBtn = currBtn;
+        if(digitalRead(JOY_SELECT) == LOW) {
+            if(btnLowTime == 0) btnLowTime = millis();
+            else if(millis() - btnLowTime > 500) { playClick(); running = false; }
+        } else {
+            btnLowTime = 0;
+        }
 
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
