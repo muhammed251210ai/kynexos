@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.135 - THE MCLK SHIELD
+ * KynexOs Sovereign Build v230.136 - THE STUDIO CORE
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: I2S MCLK Pin 0 Collision Fixed, Zero Ghost Power Menu!
+ * Özellikler: Pro Music Player (List, Seek, PauseResume), Zero-Clip Audio (Max 12)
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -144,9 +144,8 @@ void playBootSound() {
     playToneI2S(1046.50, 300); 
 }
 
-// MUHAMMED: KİLİTLENMEZ GHOST KALKANI VE GÜÇ MENÜSÜ ENGELLEYİCİ
 void clearTouchGhost() {
-    pressTimer = 0; // Cıkıs aninda Guc Menusu suresini tamamen SIFIRLA!
+    pressTimer = 0; 
     isLongPress = false;
     unsigned long silenceStart = millis();
     unsigned long absoluteStart = millis();
@@ -159,10 +158,9 @@ void clearTouchGhost() {
         if(millis() - absoluteStart > 2000) break; 
         delay(10);
     }
-    pressTimer = 0; // Garanti olsun diye cikarken bir kez daha SIFIRLA!
+    pressTimer = 0; 
 }
 
-// I2S AMFİSİ ELEKTRİKSEL PARAZİT FİLTRESİ
 int getTX(int rawX) { 
     if(rawX < 100 || rawX > 4050) return 999; 
     int tx = map(rawX, 3900, 150, 0, 320) + 15; 
@@ -677,58 +675,79 @@ void renderMusicPlayerUI() {
     if(musicFiles.size() == 0) {
         tft.setCursor(20, 100); tft.print("HATA: MP3 bulunamadi.");
         tft.setCursor(20, 120); tft.print("Dosya Yoneticisiyle /music icine MP3 atin.");
-        tft.fillRect(100, 200, 120, 30, 0xF800); tft.setCursor(135, 210); tft.print("GERI CIK");
+        tft.fillRect(270, 5, 40, 25, 0xF800); tft.setCursor(275, 12); tft.print("CIK");
         return;
     }
 
-    tft.fillRect(10, 50, 300, 40, 0x0000);
-    tft.setCursor(20, 65);
+    tft.fillRect(10, 45, 300, 35, 0x0000);
+    tft.setCursor(15, 55);
     String fullPath = musicFiles[currentTrackIndex];
     String trackName = fullPath.substring(fullPath.lastIndexOf('/') + 1);
     if(trackName.length() > 35) trackName = trackName.substring(0, 35) + "...";
     tft.print(trackName);
 
-    tft.fillRect(10, 100, 300, 20, 0x10A2);
-    tft.setCursor(15, 105);
-    tft.setTextColor(0x07E0);
-    tft.print(isPlaying ? "OYNATILIYOR..." : "DURDURULDU.");
+    tft.setCursor(15, 85);
+    tft.setTextColor(isPlaying ? 0x07E0 : 0xF800);
+    tft.print(isPlaying ? "OYNATILIYOR..." : "DURAKLATILDI.");
     tft.setTextColor(0xFFFF);
 
-    tft.drawRect(10, 130, 300, 15, 0xFFFF);
+    tft.drawRect(10, 110, 300, 15, 0xFFFF);
     
-    tft.fillRect(20, 150, 60, 40, 0x3186); tft.setCursor(30, 165); tft.print("<< GERI");
-    tft.fillRect(90, 150, 130, 40, isPlaying ? 0xF800 : 0x07E0); 
-    tft.setCursor(110, 165); tft.setTextSize(2); tft.print(isPlaying ? "DURDUR" : "OYNAT"); tft.setTextSize(1);
-    tft.fillRect(230, 150, 60, 40, 0x3186); tft.setCursor(240, 165); tft.print("ILERI >>");
+    tft.fillRect(10, 135, 50, 30, 0x3186); tft.setCursor(20, 145); tft.print("|<"); 
+    tft.fillRect(70, 135, 50, 30, 0x3186); tft.setCursor(80, 145); tft.print("<<"); 
+    tft.fillRect(130, 135, 60, 30, isPlaying ? 0xF800 : 0x07E0); tft.setCursor(145, 145); tft.print(isPlaying ? "||" : ">"); 
+    tft.fillRect(200, 135, 50, 30, 0x3186); tft.setCursor(210, 145); tft.print(">>"); 
+    tft.fillRect(260, 135, 50, 30, 0x3186); tft.setCursor(270, 145); tft.print(">|"); 
 
-    // MUHAMMED: Boydan Boya Dinamik Dokunmatik Ses Barı
-    tft.fillRect(10, 205, 60, 25, 0x0000); tft.setCursor(15, 213); tft.printf("SES: %%%d", globalVolume);
-    tft.drawRect(80, 205, 230, 25, 0xFFFF); tft.fillRect(80, 205, (globalVolume*230)/100, 25, 0x07E0);
+    tft.fillRect(10, 175, 145, 25, 0x03FF); tft.setCursor(45, 183); tft.print("BASTAN AL");
+    tft.fillRect(165, 175, 145, 25, 0x07E0); tft.setTextColor(0x0000); tft.setCursor(200, 183); tft.print("SARKI SEC"); tft.setTextColor(0xFFFF);
+
+    tft.fillRect(10, 210, 60, 25, 0x0000); tft.setCursor(15, 218); tft.printf("SES %%%d", globalVolume);
+    tft.drawRect(75, 210, 235, 25, 0xFFFF); tft.fillRect(75, 210, (globalVolume*235)/100, 25, 0x07E0);
     
-    tft.fillRect(270, 5, 40, 25, 0xF800); tft.setCursor(275, 12); tft.print("CIK");
+    tft.fillRect(270, 5, 40, 25, 0xF800); tft.setCursor(280, 14); tft.print("CIK");
+}
+
+void renderSongList(int scroll) {
+    tft.fillScreen(0x10A2);
+    tft.fillRect(0, 0, 320, 30, 0x03FF);
+    tft.setTextColor(0xFFFF); tft.setTextSize(1); tft.setCursor(10, 10); tft.print("SARKI SECIMI");
+    tft.fillRect(270, 5, 40, 20, 0xF800); tft.setCursor(280, 11); tft.print("IPTAL");
+
+    tft.fillRect(270, 40, 40, 80, 0x3186); tft.setCursor(275, 75); tft.print("YUKARI");
+    tft.fillRect(270, 140, 40, 80, 0x3186); tft.setCursor(275, 175); tft.print("ASAGI");
+
+    for(int i=0; i<5; i++) {
+        int idx = scroll + i;
+        if(idx < musicFiles.size()) {
+            int y = 40 + (i*40);
+            tft.fillRect(10, y, 250, 35, (idx == currentTrackIndex) ? 0x07E0 : 0xFFFF);
+            tft.setTextColor(0x0000); tft.setCursor(15, y+13);
+            String n = musicFiles[idx].substring(7);
+            if(n.length() > 25) n = n.substring(0, 25) + "..";
+            tft.print(n);
+        }
+    }
 }
 
 void runMusicPlayer() {
     loadMusicFiles();
-    renderMusicPlayerUI();
     
-    clearTouchGhost();
-    bool running = true;
-    unsigned long btnLowTime = 0;
-
     if(musicFiles.size() == 0) {
+        renderMusicPlayerUI();
+        clearTouchGhost();
+        bool running = true;
+        unsigned long btnLowTime = 0;
         while(running) {
             esp_task_wdt_reset();
-            
-            // SADECE HATA EKRANINDA 0 PİNİ ÇALIŞIR
             if(digitalRead(JOY_SELECT) == LOW) {
                 if(btnLowTime == 0) btnLowTime = millis();
                 else if(millis() - btnLowTime > 500) running = false;
             } else { btnLowTime = 0; }
 
             if(touch.touched()) {
-                TS_Point p = touch.getPoint(); int ty = getTY(p.y);
-                if(ty > 190) { playClick(); running = false; }
+                TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
+                if(tx > 260 && ty < 40) { playClick(); running = false; }
             }
             delay(10);
         }
@@ -740,72 +759,130 @@ void runMusicPlayer() {
     
     Audio *mp3Audio = new Audio(); 
     mp3Audio->setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
-    mp3Audio->setVolume(globalVolume / 4.76); 
     
-    if(isPlaying) mp3Audio->connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
+    // MUHAMMED: I2S AMFI CIZIRTI ONLEME ZIRHI (Volume MAX 12)
+    mp3Audio->setVolume(map(globalVolume, 0, 100, 0, 12)); 
+    
+    isPlaying = true;
+    mp3Audio->connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
+    
+    renderMusicPlayerUI();
+    clearTouchGhost();
+    
+    bool running = true;
+    unsigned long btnLowTime = 0;
+    bool inListMode = false;
+    int listScroll = 0;
 
     while(running) {
         esp_task_wdt_reset();
         
-        // MUHAMMED: I2S MCLK ÇATIŞMASINI %100 BİTİREN KURAL!
-        // MP3 Çalar açıkken 0. Pin (JOY_SELECT) DONANIMSAL OLARAK İPTAL EDİLDİ!
-        // Çıkış için SADECE ekranın sağ üst köşesindeki kırmızı "CIK" butonuna dokunulmalıdır.
-
-        if(isPlaying) {
+        // MUHAMMED: MCLK ÇARPISMASI İPTAL! Şarkı çalarken 0. pini GORMEZDEN GELİR.
+        
+        if(isPlaying && !inListMode) {
             mp3Audio->loop(); 
-            
             if(millis() - lastMusicUITime > 1000) {
-                tft.fillRect(10, 130, 300, 15, 0x0000); 
+                tft.fillRect(10, 110, 300, 15, 0x0000); 
                 int currentSec = mp3Audio->getAudioCurrentTime();
                 int totalSec = mp3Audio->getAudioFileDuration();
                 if(totalSec > 0) {
                     int barWidth = (currentSec * 300) / totalSec;
-                    tft.fillRect(10, 130, barWidth, 15, 0x07E0);
+                    tft.fillRect(10, 110, barWidth, 15, 0x07E0);
                 }
                 lastMusicUITime = millis();
             }
+        } else if (isPlaying && inListMode) {
+            mp3Audio->loop(); 
         }
 
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
             
-            if(tx > 260 && ty < 40) { mp3Audio->stopSong(); isPlaying = false; playClick(); running = false; }
-            
-            else if(ty > 150 && ty < 195) {
-                if(tx <= 90) { 
-                    if(currentTrackIndex > 0) currentTrackIndex--; else currentTrackIndex = musicFiles.size() - 1;
-                    isPlaying = true;
-                    mp3Audio->stopSong(); 
-                    mp3Audio->connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
-                    renderMusicPlayerUI(); clearTouchGhost();
-                } 
-                else if(tx >= 230) { 
-                    if(currentTrackIndex < musicFiles.size() - 1) currentTrackIndex++; else currentTrackIndex = 0;
-                    isPlaying = true;
-                    mp3Audio->stopSong(); 
-                    mp3Audio->connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
-                    renderMusicPlayerUI(); clearTouchGhost();
-                } 
-                else { 
-                    isPlaying = !isPlaying;
-                    if(isPlaying) mp3Audio->connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
-                    else mp3Audio->stopSong();
-                    renderMusicPlayerUI(); clearTouchGhost();
+            if(inListMode) {
+                if(tx > 270 && ty < 35) { 
+                    playClick(); inListMode = false; renderMusicPlayerUI(); clearTouchGhost();
+                } else if(tx > 270 && ty > 40 && ty < 120) { 
+                    playClick(); if(listScroll > 0) listScroll--; renderSongList(listScroll); clearTouchGhost();
+                } else if(tx > 270 && ty > 140 && ty < 220) { 
+                    playClick(); if(listScroll < musicFiles.size()-1) listScroll++; renderSongList(listScroll); clearTouchGhost();
+                } else if(tx < 260 && ty > 40 && ty < 240) { 
+                    int clicked = listScroll + ((ty - 40) / 40);
+                    if(clicked < musicFiles.size()) {
+                        playClick();
+                        currentTrackIndex = clicked;
+                        inListMode = false;
+                        isPlaying = true;
+                        mp3Audio->stopSong();
+                        mp3Audio->connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
+                        renderMusicPlayerUI();
+                        clearTouchGhost();
+                    }
                 }
-            }
-            
-            else if(ty > 200) { 
-                if(tx > 80) {
-                    globalVolume = ((tx - 80) * 100) / 230;
-                    if(globalVolume < 0) globalVolume = 0; if(globalVolume > 100) globalVolume = 100;
-                    prefs.putInt("vol", globalVolume);
-                    mp3Audio->setVolume(globalVolume / 4.76);
-                    
-                    tft.fillRect(10, 205, 60, 25, 0x0000); tft.setCursor(15, 213); tft.printf("SES: %%%d", globalVolume);
-                    tft.fillRect(80, 205, 230, 25, 0x0000); 
-                    tft.fillRect(80, 205, (globalVolume*230)/100, 25, 0x07E0);
-                    tft.drawRect(80, 205, 230, 25, 0xFFFF);
-                    delay(50);
+            } else {
+                if(tx > 260 && ty < 40) { 
+                    mp3Audio->stopSong(); isPlaying = false; playClick(); running = false; clearTouchGhost(); 
+                }
+                else if(ty >= 135 && ty <= 165) {
+                    if(tx >= 10 && tx <= 60) { // Prev
+                        playClick();
+                        if(currentTrackIndex > 0) currentTrackIndex--; else currentTrackIndex = musicFiles.size() - 1;
+                        isPlaying = true; mp3Audio->stopSong(); mp3Audio->connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
+                        renderMusicPlayerUI(); clearTouchGhost();
+                    }
+                    else if(tx >= 70 && tx <= 120) { // -10s
+                        playClick();
+                        int cSec = mp3Audio->getAudioCurrentTime();
+                        int nSec = cSec - 10; if(nSec < 0) nSec = 0;
+                        mp3Audio->setAudioPlayPosition(nSec);
+                        clearTouchGhost();
+                    }
+                    else if(tx >= 130 && tx <= 190) { // Play/Pause
+                        playClick();
+                        mp3Audio->pauseResume(); // MUHAMMED: Kapanıp baştan başlama sorunu çözüldü!
+                        isPlaying = !isPlaying;
+                        renderMusicPlayerUI(); clearTouchGhost();
+                    }
+                    else if(tx >= 200 && tx <= 250) { // +10s
+                        playClick();
+                        int cSec = mp3Audio->getAudioCurrentTime();
+                        mp3Audio->setAudioPlayPosition(cSec + 10);
+                        clearTouchGhost();
+                    }
+                    else if(tx >= 260 && tx <= 310) { // Next
+                        playClick();
+                        if(currentTrackIndex < musicFiles.size() - 1) currentTrackIndex++; else currentTrackIndex = 0;
+                        isPlaying = true; mp3Audio->stopSong(); mp3Audio->connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
+                        renderMusicPlayerUI(); clearTouchGhost();
+                    }
+                }
+                else if(ty >= 175 && ty <= 200) {
+                    if(tx >= 10 && tx <= 155) { // BASTAN AL
+                        playClick();
+                        mp3Audio->stopSong();
+                        mp3Audio->connecttoFS(FFat, musicFiles[currentTrackIndex].c_str());
+                        isPlaying = true;
+                        renderMusicPlayerUI(); clearTouchGhost();
+                    }
+                    else if(tx >= 165 && tx <= 310) { // LISTE
+                        playClick();
+                        inListMode = true;
+                        renderSongList(listScroll);
+                        clearTouchGhost();
+                    }
+                }
+                else if(ty >= 210 && ty <= 235) { // SES
+                    if(tx > 75) {
+                        globalVolume = ((tx - 75) * 100) / 235;
+                        if(globalVolume < 0) globalVolume = 0; if(globalVolume > 100) globalVolume = 100;
+                        prefs.putInt("vol", globalVolume);
+                        mp3Audio->setVolume(map(globalVolume, 0, 100, 0, 12));
+                        
+                        tft.fillRect(10, 210, 60, 25, 0x0000); tft.setCursor(15, 218); tft.printf("SES %%%d", globalVolume);
+                        tft.fillRect(75, 210, 235, 25, 0x0000); 
+                        tft.fillRect(75, 210, (globalVolume*235)/100, 25, 0x07E0);
+                        tft.drawRect(75, 210, 235, 25, 0xFFFF);
+                        delay(50);
+                    }
                 }
             }
         }
