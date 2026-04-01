@@ -1,7 +1,7 @@
 /* **************************************************************************
- * KynexOs Sovereign Build v230.134 - THE TITANIUM ARMOR
+ * KynexOs Sovereign Build v230.135 - THE MCLK SHIELD
  * Geliştirici: Muhammed (Kynex)
- * Özellikler: I2S Amp Spike Filter (No Ghost Exits), 500ms Button Debounce
+ * Özellikler: I2S MCLK Pin 0 Collision Fixed, Zero Ghost Power Menu!
  * Donanım: ESP32-S3 N16R8 (V325 Pinout)
  * Talimat: Asla satır silmeden, optimize etmeden, tam ve tek parça kod.
  * **************************************************************************
@@ -144,24 +144,25 @@ void playBootSound() {
     playToneI2S(1046.50, 300); 
 }
 
-// MUHAMMED: KİLİTLENMEZ GHOST KALKANI
-// 300ms sessizlik bekler, ancak donanım arızası varsa 2 saniyede sistemi zorla kurtarır.
+// MUHAMMED: KİLİTLENMEZ GHOST KALKANI VE GÜÇ MENÜSÜ ENGELLEYİCİ
 void clearTouchGhost() {
+    pressTimer = 0; // Cıkıs aninda Guc Menusu suresini tamamen SIFIRLA!
+    isLongPress = false;
     unsigned long silenceStart = millis();
     unsigned long absoluteStart = millis();
     while(millis() - silenceStart < 300) {
         esp_task_wdt_reset();
         if(touch.touched()) {
-            touch.getPoint(); // Veriyi yut
-            silenceStart = millis(); // Sessizliği baştan başlat
+            touch.getPoint(); 
+            silenceStart = millis(); 
         }
-        if(millis() - absoluteStart > 2000) break; // Zırh delinirse sistemi sonsuz döngüden kurtar
+        if(millis() - absoluteStart > 2000) break; 
         delay(10);
     }
+    pressTimer = 0; // Garanti olsun diye cikarken bir kez daha SIFIRLA!
 }
 
-// MUHAMMED: I2S AMFİSİ ELEKTRİKSEL PARAZİT FİLTRESİ
-// Eğer ADC değerleri 100'ün altı veya 4050'nin üstündeyse bu parazittir! 999 döndürerek ÇIKIŞ butonundan uzaklaştırır.
+// I2S AMFİSİ ELEKTRİKSEL PARAZİT FİLTRESİ
 int getTX(int rawX) { 
     if(rawX < 100 || rawX > 4050) return 999; 
     int tx = map(rawX, 3900, 150, 0, 320) + 15; 
@@ -718,6 +719,8 @@ void runMusicPlayer() {
     if(musicFiles.size() == 0) {
         while(running) {
             esp_task_wdt_reset();
+            
+            // SADECE HATA EKRANINDA 0 PİNİ ÇALIŞIR
             if(digitalRead(JOY_SELECT) == LOW) {
                 if(btnLowTime == 0) btnLowTime = millis();
                 else if(millis() - btnLowTime > 500) running = false;
@@ -744,12 +747,9 @@ void runMusicPlayer() {
     while(running) {
         esp_task_wdt_reset();
         
-        if(digitalRead(JOY_SELECT) == LOW) {
-            if(btnLowTime == 0) btnLowTime = millis();
-            else if(millis() - btnLowTime > 500) { playClick(); running = false; }
-        } else {
-            btnLowTime = 0;
-        }
+        // MUHAMMED: I2S MCLK ÇATIŞMASINI %100 BİTİREN KURAL!
+        // MP3 Çalar açıkken 0. Pin (JOY_SELECT) DONANIMSAL OLARAK İPTAL EDİLDİ!
+        // Çıkış için SADECE ekranın sağ üst köşesindeki kırmızı "CIK" butonuna dokunulmalıdır.
 
         if(isPlaying) {
             mp3Audio->loop(); 
@@ -769,7 +769,7 @@ void runMusicPlayer() {
         if(touch.touched()) {
             TS_Point p = touch.getPoint(); int tx = getTX(p.x); int ty = getTY(p.y);
             
-            if(tx > 260 && ty < 40) { playClick(); running = false; clearTouchGhost(); }
+            if(tx > 260 && ty < 40) { mp3Audio->stopSong(); isPlaying = false; playClick(); running = false; }
             
             else if(ty > 150 && ty < 195) {
                 if(tx <= 90) { 
